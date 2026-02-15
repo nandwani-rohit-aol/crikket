@@ -8,6 +8,9 @@
     "./client": {
       "default": "./src/client.ts"
     },
+    "./procedures/*": {
+      "default": "./src/procedures/*.ts"
+    },
     "./*": {
       "default": "./src/*.ts"
     }
@@ -16,15 +19,23 @@
   "dependencies": {
     "@crikket/db": "workspace:*",
     "@crikket/env": "workspace:*",
+    "@crikket/shared": "workspace:*",
     "@polar-sh/better-auth": "catalog:",
     "@polar-sh/checkout": "catalog:",
     "@polar-sh/sdk": "catalog:",
+    "@orpc/server": "catalog:",
+    "@react-email/components": "catalog:",
+    "@react-email/render": "catalog:",
+    "drizzle-orm": "catalog:",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
+    "react": "catalog:",
+    "resend": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@crikket/config": "workspace:*",
+    "@types/react": "catalog:",
     "typescript": "catalog:"
   }
 }
