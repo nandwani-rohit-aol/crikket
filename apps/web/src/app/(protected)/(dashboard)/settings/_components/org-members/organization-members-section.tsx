@@ -163,9 +163,12 @@ export function OrganizationMembersSection({
         management={{
           canManageMembers: canManage,
           currentUserId,
-          updatingMemberId:
-            updateMemberRoleMutation.variables?.memberId ?? null,
-          removingMemberId: removeMemberMutation.variables ?? null,
+          updatingMemberId: updateMemberRoleMutation.isPending
+            ? (updateMemberRoleMutation.variables?.memberId ?? null)
+            : null,
+          removingMemberId: removeMemberMutation.isPending
+            ? (removeMemberMutation.variables ?? null)
+            : null,
           onUpdateMemberRole: (memberId, role) =>
             updateMemberRoleMutation.mutateAsync({ memberId, role }),
           onRemoveMember: (memberId) =>
@@ -176,7 +179,11 @@ export function OrganizationMembersSection({
       />
 
       <PendingInvitations
-        cancelingInvitationId={cancelInvitationMutation.variables ?? null}
+        cancelingInvitationId={
+          cancelInvitationMutation.isPending
+            ? (cancelInvitationMutation.variables ?? null)
+            : null
+        }
         canManageMembers={canManage}
         invitations={pendingInvitations}
         onCancelInvitation={(invitationId) =>

@@ -61,6 +61,11 @@ export function MembersTable({
       search: value,
     }).catch(() => undefined)
   }, 500)
+  const [searchValue, setSearchValue] = React.useState(search)
+
+  React.useEffect(() => {
+    setSearchValue(search)
+  }, [search])
 
   const columns = React.useMemo(
     () =>
@@ -108,12 +113,13 @@ export function MembersTable({
       <CardContent className="space-y-4">
         <Input
           className="h-9 max-w-sm"
-          defaultValue={search}
-          key={search}
           onChange={(event) => {
-            updateSearchQuery(event.target.value)
+            const nextSearch = event.target.value
+            setSearchValue(nextSearch)
+            updateSearchQuery(nextSearch)
           }}
           placeholder="Search members by email"
+          value={searchValue}
         />
         <DataTable table={table} />
         <ConfirmationDialog

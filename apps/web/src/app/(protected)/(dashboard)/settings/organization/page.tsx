@@ -26,8 +26,45 @@ interface OrganizationSettingsPageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
+type MembersListOptions = NonNullable<
+  Parameters<typeof authClient.organization.listMembers>[0]
+>
+type MembersListQuery = NonNullable<MembersListOptions["query"]>
+type MembersListResult = Awaited<
+  ReturnType<typeof authClient.organization.listMembers>
+>
+type OrganizationMember = NonNullable<
+  NonNullable<MembersListResult["data"]>["members"]
+>[number]
+
 function toIsoString(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : value
+}
+
+function getAuthErrorMessage(error: unknown): string {
+  if (!error || typeof error !== "object") {
+    return "Unknown error"
+  }
+
+  const message =
+    "message" in error && typeof error.message === "string"
+      ? error.message
+      : null
+  if (message && message.length > 0) {
+    return message
+  }
+
+  const statusText =
+    "statusText" in error && typeof error.statusText === "string"
+      ? error.statusText
+      : null
+  if (statusText && statusText.length > 0) {
+    return statusText
+  }
+
+  const code =
+    "code" in error && typeof error.code === "string" ? error.code : null
+  return code ?? "Unknown error"
 }
 
 export default async function OrganizationSettingsPage({
@@ -56,16 +93,7 @@ export default async function OrganizationSettingsPage({
       headers: requestHeaders,
     },
   }
-  const membersListQuery: {
-    organizationId: string
-    limit: number
-    offset: number
-    sortBy: "createdAt"
-    sortDirection: "desc"
-    filterField?: string
-    filterOperator?: "contains"
-    filterValue?: string
-  } = {
+  const membersListQuery: MembersListQuery = {
     organizationId: activeOrganization.id,
     limit: membersQuery.perPage,
     offset: membersQuery.offset,
@@ -73,11 +101,57 @@ export default async function OrganizationSettingsPage({
     sortDirection: "desc",
   }
 
-  if (membersQuery.search) {
-    membersListQuery.filterField = "email"
-    membersListQuery.filterOperator = "contains"
-    membersListQuery.filterValue = membersQuery.search
-  }
+  const membersPromise: Promise<MembersListResult> = membersQuery.search
+    ? (async () => {
+        const initialMembersResponse =
+          await authClient.organization.listMembers({
+            query: {
+              ...membersListQuery,
+              limit: 1,
+              offset: 0,
+            },
+            ...authFetchOptions,
+          })
+        if (initialMembersResponse.error || !initialMembersResponse.data) {
+          return initialMembersResponse
+        }
+
+        const fullMembersResponse = await authClient.organization.listMembers({
+          query: {
+            ...membersListQuery,
+            limit: Math.max(1, initialMembersResponse.data.total),
+            offset: 0,
+          },
+          ...authFetchOptions,
+        })
+        if (fullMembersResponse.error || !fullMembersResponse.data) {
+          return fullMembersResponse
+        }
+
+        const normalizedSearch = (membersQuery.search ?? "")
+          .trim()
+          .toLowerCase()
+        const matchedMembers = fullMembersResponse.data.members.filter(
+          (member) => member.user.email.toLowerCase().includes(normalizedSearch)
+        )
+        const paginatedMembers = matchedMembers.slice(
+          membersQuery.offset,
+          membersQuery.offset + membersQuery.perPage
+        )
+
+        return {
+          ...fullMembersResponse,
+          data: {
+            ...fullMembersResponse.data,
+            members: paginatedMembers,
+            total: matchedMembers.length,
+          },
+        }
+      })()
+    : authClient.organization.listMembers({
+        query: membersListQuery,
+        ...authFetchOptions,
+      })
 
   const [
     { data: memberRoleData },
@@ -90,10 +164,7 @@ export default async function OrganizationSettingsPage({
       },
       ...authFetchOptions,
     }),
-    authClient.organization.listMembers({
-      query: membersListQuery,
-      ...authFetchOptions,
-    }),
+    membersPromise,
     authClient.organization.listInvitations({
       query: {
         organizationId: activeOrganization.id,
@@ -102,14 +173,16 @@ export default async function OrganizationSettingsPage({
     }),
   ])
 
-  const members = (membersData?.members ?? []).map((member) => ({
-    memberId: member.id,
-    userId: member.userId,
-    name: member.user.name,
-    email: member.user.email,
-    role: member.role,
-    joinedAt: toIsoString(member.createdAt),
-  }))
+  const members = (membersData?.members ?? []).map(
+    (member: OrganizationMember) => ({
+      memberId: member.id,
+      userId: member.userId,
+      name: member.user.name,
+      email: member.user.email,
+      role: member.role,
+      joinedAt: toIsoString(member.createdAt),
+    })
+  )
   const pendingInvitations = (invitationData ?? [])
     .filter((invitation) => invitation.status === "pending")
     .map((invitation) => ({
@@ -165,7 +238,7 @@ export default async function OrganizationSettingsPage({
 
       {membersError ? (
         <p className="text-destructive text-sm">
-          Failed to load members: {membersError.message}
+          Failed to load members: {getAuthErrorMessage(membersError)}
         </p>
       ) : null}
       {invitationError ? (
