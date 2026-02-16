@@ -15,7 +15,7 @@ import { toggleValue } from "../_components/bug-reports/utils"
 
 export function useBugReportsFilters() {
   const [searchValue, setSearchValue] = useState("")
-  const debouncedSearch = useDebounce(searchValue, 300)
+  const debouncedSearch = useDebounce(searchValue)
   const [sort, setSort] = useState<BugReportSort>(
     BUG_REPORT_SORT_OPTIONS.newest
   )

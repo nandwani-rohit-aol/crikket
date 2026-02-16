@@ -11,6 +11,7 @@ import {
 } from "@crikket/ui/components/ui/card"
 import { Input } from "@crikket/ui/components/ui/input"
 import { useDataTable } from "@crikket/ui/hooks/use-data-table"
+import { useDebouncedCallback } from "@crikket/ui/hooks/use-debounced-callback"
 import { parseAsInteger, parseAsString, useQueryStates } from "nuqs"
 import * as React from "react"
 
@@ -54,6 +55,13 @@ export function MembersTable({
       history: "replace",
     }
   )
+  const updateSearchQuery = useDebouncedCallback((value: string) => {
+    setMembersSearchQuery({
+      page: paginationConfig.defaultPage,
+      search: value,
+    }).catch(() => undefined)
+  }, 500)
+
   const columns = React.useMemo(
     () =>
       createMembersTableColumns({
@@ -80,13 +88,14 @@ export function MembersTable({
     initialState: {
       pagination: {
         pageIndex: 0,
-        pageSize: paginationConfig.defaultPageSize,
+        pageSize: perPage,
       },
     },
     queryKeys: {
       page: "page",
       perPage: "perPage",
     },
+    debounceMs: 0,
     history: "push",
     shallow: false,
   })
@@ -99,14 +108,12 @@ export function MembersTable({
       <CardContent className="space-y-4">
         <Input
           className="h-9 max-w-sm"
+          defaultValue={search}
+          key={search}
           onChange={(event) => {
-            setMembersSearchQuery({
-              page: paginationConfig.defaultPage,
-              search: event.target.value,
-            }).catch(() => undefined)
+            updateSearchQuery(event.target.value)
           }}
           placeholder="Search members by email"
-          value={search}
         />
         <DataTable table={table} />
         <ConfirmationDialog
