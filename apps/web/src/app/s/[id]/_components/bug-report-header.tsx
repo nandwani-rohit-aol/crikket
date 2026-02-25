@@ -33,30 +33,30 @@ export function BugReportHeader({
   editAction,
 }: BugReportHeaderProps & { sidebarTrigger?: ReactNode }) {
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4">
-      <div className="flex items-center gap-4">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b bg-background px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
         <div className="md:hidden">{sidebarTrigger}</div>
         <Link
-          className="flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
+          className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
           href="/"
         >
           <span className="font-semibold text-foreground">crikket</span>
         </Link>
-        <Separator orientation="vertical" />
-        <div className="flex items-center gap-2">
+        <Separator className="h-5 shrink-0" orientation="vertical" />
+        <div className="flex min-w-0 items-center gap-2">
           <h1
-            className="max-w-[300px] truncate font-medium text-sm"
+            className="truncate font-medium text-sm"
             title={data.title ?? "Untitled"}
           >
             {data.title ?? "Untitled Bug Report"}
           </h1>
-          <span className="hidden items-center rounded-full border bg-secondary px-2 py-0.5 font-semibold text-secondary-foreground text-xs sm:inline-flex">
+          <span className="hidden shrink-0 items-center rounded-full border bg-secondary px-2 py-0.5 font-semibold text-secondary-foreground text-xs sm:inline-flex">
             {formatStatusLabel(data.status)}
           </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <span className="hidden text-muted-foreground text-xs sm:inline-block">
           {new Date(data.createdAt).toLocaleString()}
         </span>
