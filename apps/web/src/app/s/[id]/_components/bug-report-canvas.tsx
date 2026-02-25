@@ -1,4 +1,5 @@
 import { reportNonFatalError } from "@crikket/shared/lib/errors"
+import { InteractiveImageViewer } from "@crikket/ui/components/interactive-image-viewer"
 import { FileText } from "lucide-react"
 import { forwardRef, type SyntheticEvent, useCallback, useRef } from "react"
 import type { SharedBugReport } from "./types"
@@ -131,14 +132,10 @@ export const BugReportCanvas = forwardRef<
             src={data.attachmentUrl ?? undefined}
           />
         ) : showImage ? (
-          <img
+          <InteractiveImageViewer
             alt={data.title ?? "Bug report attachment"}
-            className={
-              compact
-                ? "h-auto w-full object-contain"
-                : "max-h-full max-w-full rounded-lg object-contain shadow-sm"
-            }
-            src={data.attachmentUrl ?? undefined}
+            compact={compact}
+            src={data.attachmentUrl ?? ""}
           />
         ) : (
           <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-background/50 p-8 text-muted-foreground">
