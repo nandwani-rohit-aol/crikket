@@ -30,7 +30,7 @@ export const pricingTiers: PricingTier[] = [
       "Public or private share links per report",
     ],
     highlighted: true,
-    cta: "Get Started",
+    cta: "Choose Pro",
   },
   {
     name: "Studio",
@@ -43,6 +43,6 @@ export const pricingTiers: PricingTier[] = [
       "Unlimited team members",
       "Up to 20 minutes per video recording",
     ],
-    cta: "Get Started",
+    cta: "Choose Studio",
   },
 ]

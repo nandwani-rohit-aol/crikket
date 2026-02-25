@@ -1,3 +1,4 @@
+import { env } from "@crikket/env/web"
 import { BentoCard, BentoGrid } from "@crikket/ui/components/magicui/bento-grid"
 import {
   Camera,
@@ -327,7 +328,7 @@ const features = [
     name: "Bug Report Feed",
     description:
       "Keep every bug report in one place for triage and reproduction. Crikket focuses on report context to help your team resolve issues faster.",
-    href: "#",
+    href: env.NEXT_PUBLIC_APP_URL,
     cta: "Review reports",
     background: <DashboardBackground />,
     className: "col-span-3 md:col-span-2",
@@ -337,7 +338,7 @@ const features = [
     name: "One-Click Capture",
     description:
       "Capture issues with video or screenshot in seconds, directly from the browser.",
-    href: "#",
+    href: env.NEXT_PUBLIC_DEMO_URL ?? env.NEXT_PUBLIC_APP_URL,
     cta: "Capture a report",
     background: <CaptureBackground />,
     className: "col-span-3 md:col-span-1",
@@ -347,7 +348,7 @@ const features = [
     name: "Replay Context Included",
     description:
       "Each report includes reproduction steps, console logs, and network requests to speed up debugging.",
-    href: "#",
+    href: env.NEXT_PUBLIC_DEMO_URL ?? env.NEXT_PUBLIC_APP_URL,
     cta: "View report context",
     background: <ReplayBackground />,
     className: "col-span-3 md:col-span-1",
@@ -357,7 +358,7 @@ const features = [
     name: "Share Links with Access Control",
     description:
       "Share any report with a single link and choose public or private visibility per report.",
-    href: "#",
+    href: env.NEXT_PUBLIC_DEMO_URL ?? env.NEXT_PUBLIC_APP_URL,
     cta: "Share reports",
     background: <ShareBackground />,
     className: "col-span-3 md:col-span-1",
@@ -367,7 +368,7 @@ const features = [
     name: "Workspaces for Teams",
     description:
       "Invite teammates into shared workspaces, manage access, and collaborate on reports.",
-    href: "#",
+    href: env.NEXT_PUBLIC_APP_URL,
     cta: "Explore plans",
     background: <TeamBackground />,
     className: "col-span-3 md:col-span-1",
@@ -392,7 +393,7 @@ export function FeaturesSection() {
 
       <BentoGrid>
         {features.map((feature) => (
-          <BentoCard key={feature.name} {...feature} />
+          <BentoCard key={feature.name} openInNewTab {...feature} />
         ))}
       </BentoGrid>
     </section>

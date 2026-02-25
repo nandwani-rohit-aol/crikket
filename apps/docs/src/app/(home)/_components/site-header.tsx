@@ -1,5 +1,6 @@
 "use client"
 
+import { env } from "@crikket/env/web"
 import { siteConfig } from "@crikket/shared/config/site"
 import { ModeToggle } from "@crikket/ui/components/mode-toggle"
 import { Button } from "@crikket/ui/components/ui/button"
@@ -101,7 +102,20 @@ export function SiteHeader() {
         </div>
         <div className="flex items-center gap-2">
           <nav className="hidden items-center gap-2 md:flex">
-            <Link href={siteConfig.links.repo} rel="noreferrer" target="_blank">
+            <Link
+              href={env.NEXT_PUBLIC_APP_URL}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <Button className="h-9 px-4" size="sm">
+                Get Started
+              </Button>
+            </Link>
+            <Link
+              href={siteConfig.links.repo}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
               <div className="inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
                 <Github className="h-4 w-4" />
                 <span className="sr-only">GitHub</span>
@@ -149,7 +163,7 @@ export function SiteHeader() {
                       className="flex items-center gap-2 rounded-md px-3 py-2 font-medium text-sm transition-colors hover:bg-muted"
                       href={siteConfig.links.repo}
                       onClick={() => setIsMobileNavOpen(false)}
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       target="_blank"
                     >
                       <Github className="h-4 w-4" />

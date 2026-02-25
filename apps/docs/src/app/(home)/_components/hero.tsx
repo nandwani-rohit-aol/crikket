@@ -8,6 +8,9 @@ import Link from "next/link"
 import { HeroDemo } from "./hero-demo"
 
 export function Hero() {
+  const appUrl = env.NEXT_PUBLIC_APP_URL
+  const demoUrl = env.NEXT_PUBLIC_DEMO_URL
+
   return (
     <div className="flex w-full flex-col items-center space-y-16">
       <section className="flex max-w-4xl flex-col items-center space-y-8 px-4 sm:px-0">
@@ -17,7 +20,7 @@ export function Hero() {
           rel="noreferrer"
           target="_blank"
         >
-          <Github className="mr-2 h-4 w-4" />
+          <Github />
           Star on GitHub
         </Link>
 
@@ -36,14 +39,16 @@ export function Hero() {
         </p>
 
         <div className="flex flex-col items-center gap-4 pt-4 sm:flex-row sm:gap-6">
-          <Link href={env.NEXT_PUBLIC_APP_URL} target="_blank">
+          <Link href={appUrl} rel="noopener noreferrer" target="_blank">
             <InteractiveHoverButton className="h-12 px-8">
               Get Started
             </InteractiveHoverButton>
           </Link>
-          <Link href={env.NEXT_PUBLIC_DEMO_URL || "#"} target="_blank">
-            <Button className="h-12 rounded-full px-8">Live Demo</Button>
-          </Link>
+          {demoUrl ? (
+            <Link href={demoUrl} rel="noopener noreferrer" target="_blank">
+              <Button className="h-12 rounded-full px-8">Live Demo</Button>
+            </Link>
+          ) : null}
         </div>
       </section>
 

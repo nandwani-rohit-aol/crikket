@@ -34,6 +34,9 @@ export function PricingSection() {
         <p className="max-w-2xl text-balance text-base text-muted-foreground sm:text-lg">
           Choose a plan that fits your team and start shipping bug fixes faster.
         </p>
+        <p className="max-w-2xl text-balance text-muted-foreground text-sm sm:text-base">
+          Prefer self-hosting? It is free and open source.
+        </p>
 
         <div className="relative mt-6 inline-flex rounded-full border border-border p-1">
           <Button
