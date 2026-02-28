@@ -4,7 +4,6 @@ import {
   captureScreenshot,
   startDisplayRecording,
 } from "../media/lazy-capture-media"
-import { defaultSubmitTransport } from "../transport/default-submit-transport"
 import type {
   CapturedMedia,
   CaptureInitOptions,
@@ -18,9 +17,6 @@ import type {
 import { mountCaptureUi } from "../ui/mount-capture-ui"
 import type { MountedCaptureUi } from "../ui/types"
 import {
-  getDeviceInfo,
-  getPageTitle,
-  getPageUrl,
   normalizeEndpoint,
   normalizePublicKey,
   normalizeSubmitPath,
@@ -29,7 +25,7 @@ import {
 
 export class CaptureSdkRuntime implements CaptureRuntimeController {
   private runtimeConfig: CaptureRuntimeConfig | null = null
-  private submitTransport: CaptureSubmitTransport = defaultSubmitTransport
+  private submitTransport: CaptureSubmitTransport | undefined
   private mountedTarget: HTMLElement | null = null
   private mountedUi: MountedCaptureUi | null = null
   private readonly debuggerCollector = new LazyDebuggerCollector()
@@ -46,7 +42,7 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
     }
 
     this.runtimeConfig = config
-    this.submitTransport = options.submitTransport ?? defaultSubmitTransport
+    this.submitTransport = options.submitTransport
 
     if (options.autoMount ?? true) {
       this.mount(options.mountTarget)
@@ -116,7 +112,6 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
       this.mount()
     }
 
-    this.debuggerCollector.prefetch().catch(() => undefined)
     this.mountedUi?.store.openChooser()
   }
 
@@ -129,7 +124,7 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
     this.reset()
     this.unmount()
     this.runtimeConfig = null
-    this.submitTransport = defaultSubmitTransport
+    this.submitTransport = undefined
   }
 
   async startRecording(): Promise<{ startedAt: number }> {
@@ -217,22 +212,13 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
       )
     }
 
-    const result = await this.submitTransport({
+    const { submitCapturedReport } = await import("./submit-captured-report")
+    const result = await submitCapturedReport({
       config,
-      report: {
-        captureType: this.currentMedia.captureType,
-        title: draft.title.trim(),
-        description: draft.description.trim(),
-        priority: draft.priority,
-        pageUrl: getPageUrl(),
-        pageTitle: getPageTitle(),
-        durationMs: this.currentMedia.durationMs,
-        deviceInfo: getDeviceInfo(),
-        sdkVersion: CAPTURE_CORE_VERSION,
-        debuggerPayload: this.currentReview.debuggerPayload,
-        debuggerSummary: this.currentReview.debuggerSummary,
-        media: this.currentMedia.blob,
-      },
+      draft,
+      media: this.currentMedia,
+      review: this.currentReview,
+      submitTransport: this.submitTransport,
     })
 
     if (this.mountedUi) {

@@ -13,10 +13,6 @@ export class LazyDebuggerCollector {
   private collector: DebuggerCollectorInstance | null = null
   private collectorPromise: Promise<DebuggerCollectorInstance> | null = null
 
-  prefetch(): Promise<void> {
-    return this.ensureCollector().then(() => undefined)
-  }
-
   async startScreenshotSession(): Promise<void> {
     const collector = await this.ensureCollector()
     collector.startSession("screenshot", SCREENSHOT_LOOKBACK_MS)

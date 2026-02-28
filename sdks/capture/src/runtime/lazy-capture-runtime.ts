@@ -1,4 +1,3 @@
-import { defaultSubmitTransport } from "../transport/default-submit-transport"
 import type {
   CaptureInitOptions,
   CaptureRuntimeConfig,
@@ -21,7 +20,7 @@ type MountedCaptureLauncher = ReturnType<typeof mountCaptureLauncher>
 export class LazyCaptureSdkRuntime implements CaptureRuntimeController {
   private runtimeConfig: CaptureRuntimeConfig | null = null
   private initOptions: CaptureInitOptions | null = null
-  private submitTransport: CaptureSubmitTransport = defaultSubmitTransport
+  private submitTransport: CaptureSubmitTransport | undefined
   private mountedTarget: HTMLElement | null = null
   private mountedLauncher: MountedCaptureLauncher | null = null
   private eagerRuntime: CaptureSdkRuntime | null = null
@@ -37,7 +36,7 @@ export class LazyCaptureSdkRuntime implements CaptureRuntimeController {
     }
 
     this.runtimeConfig = runtimeConfig
-    this.submitTransport = options.submitTransport ?? defaultSubmitTransport
+    this.submitTransport = options.submitTransport
     this.initOptions = {
       ...options,
       endpoint: runtimeConfig.endpoint,
@@ -114,7 +113,7 @@ export class LazyCaptureSdkRuntime implements CaptureRuntimeController {
     this.eagerRuntime = null
     this.runtimeConfig = null
     this.initOptions = null
-    this.submitTransport = defaultSubmitTransport
+    this.submitTransport = undefined
   }
 
   async startRecording(): Promise<{ startedAt: number }> {
