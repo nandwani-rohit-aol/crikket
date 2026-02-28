@@ -1,22 +1,16 @@
-import { Button } from "@crikket/ui/components/ui/button"
-import { Field, FieldError, FieldLabel } from "@crikket/ui/components/ui/field"
-import { Input } from "@crikket/ui/components/ui/input"
-import { Textarea } from "@crikket/ui/components/ui/textarea"
 import { useForm } from "@tanstack/react-form"
 import type { CaptureSubmissionDraft } from "../../../types"
 import type { CaptureUiState } from "../../types"
 import { MediaPreview } from "../components/media-preview"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "../components/sdk-select"
+import { Button } from "../components/primitives/button"
+import { Field, FieldError } from "../components/primitives/field"
+import { Input } from "../components/primitives/input"
+import { Label } from "../components/primitives/label"
+import { Textarea } from "../components/primitives/textarea"
 import { SummaryStat } from "../components/summary-stat"
-import { usePortalContainer } from "../context/portal-container-context"
 import {
   capturePriorityOptions,
-  reviewFormSchema,
+  validateReviewDraft,
 } from "../utils/review-form-schema"
 
 interface ReviewFormSectionProps {
@@ -34,14 +28,10 @@ export function ReviewFormSection({
   onCancel,
   onSubmit,
 }: ReviewFormSectionProps): React.JSX.Element {
-  const portalContainer = usePortalContainer()
-  const priorityLabelByValue = new Map(
-    capturePriorityOptions.map((priority) => [priority.value, priority.label])
-  )
   const form = useForm({
     defaultValues: state.reviewDraft,
     validators: {
-      onSubmit: reviewFormSchema,
+      onSubmit: ({ value }) => validateReviewDraft(value),
     },
     onSubmit: ({ value }) => {
       onSubmit({
@@ -87,9 +77,7 @@ export function ReviewFormSection({
 
             return (
               <Field data-invalid={isInvalid}>
-                <FieldLabel htmlFor={`${formKey}-title`}>
-                  Title (Optional)
-                </FieldLabel>
+                <Label htmlFor={`${formKey}-title`}>Title (Optional)</Label>
                 <Input
                   aria-invalid={isInvalid}
                   id={`${formKey}-title`}
@@ -116,9 +104,7 @@ export function ReviewFormSection({
 
             return (
               <Field data-invalid={isInvalid}>
-                <FieldLabel htmlFor={`${formKey}-description`}>
-                  Description
-                </FieldLabel>
+                <Label htmlFor={`${formKey}-description`}>Description</Label>
                 <Textarea
                   aria-invalid={isInvalid}
                   className="min-h-24 resize-y"
@@ -143,41 +129,29 @@ export function ReviewFormSection({
           {(field) => {
             const isInvalid =
               field.state.meta.isTouched && field.state.meta.errors.length > 0
-            const selectedPriorityLabel =
-              priorityLabelByValue.get(field.state.value) ?? "Select priority"
 
             return (
               <Field data-invalid={isInvalid}>
-                <FieldLabel htmlFor={`${formKey}-priority`}>
-                  Priority
-                </FieldLabel>
-                <Select
-                  onValueChange={(value) => {
-                    if (value) {
-                      field.handleChange(
-                        value as CaptureSubmissionDraft["priority"]
-                      )
-                    }
+                <Label htmlFor={`${formKey}-priority`}>Priority</Label>
+                <select
+                  aria-invalid={isInvalid}
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none transition-[border-color,box-shadow] focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/60"
+                  id={`${formKey}-priority`}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => {
+                    field.handleChange(
+                      event.currentTarget
+                        .value as CaptureSubmissionDraft["priority"]
+                    )
                   }}
                   value={field.state.value}
                 >
-                  <SelectTrigger
-                    aria-invalid={isInvalid}
-                    className="w-full"
-                    id={`${formKey}-priority`}
-                  >
-                    <span className="flex flex-1 text-left">
-                      {selectedPriorityLabel}
-                    </span>
-                  </SelectTrigger>
-                  <SelectContent container={portalContainer}>
-                    {capturePriorityOptions.map((priority) => (
-                      <SelectItem key={priority.value} value={priority.value}>
-                        {priority.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {capturePriorityOptions.map((priority) => (
+                    <option key={priority.value} value={priority.value}>
+                      {priority.label}
+                    </option>
+                  ))}
+                </select>
                 {isInvalid ? (
                   <FieldError errors={field.state.meta.errors} />
                 ) : null}

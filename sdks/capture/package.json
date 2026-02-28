@@ -27,16 +27,11 @@
     "check-types": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@base-ui/react": "catalog:",
     "@crikket/shared": "workspace:*",
-    "@crikket/ui": "workspace:*",
     "@tanstack/react-form": "catalog:",
-    "@tanstack/react-query": "catalog:",
     "@crikket/capture-core": "workspace:*",
-    "lucide-react": "catalog:",
     "react": "catalog:",
-    "react-dom": "catalog:",
-    "zod": "catalog:"
+    "react-dom": "catalog:"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "catalog:",

@@ -1,6 +1,4 @@
-import { useMutation } from "@tanstack/react-query"
-import { useEffect, useRef } from "react"
-import type { CaptureSubmissionDraft } from "../../../types"
+import { useEffect, useRef, useState } from "react"
 import { toUserError } from "../../../utils"
 import type {
   CaptureUiCallbacks,
@@ -25,21 +23,7 @@ export function useCaptureUiHandlers(
   input: UseCaptureUiHandlersInput
 ): UseCaptureUiHandlersResult {
   const copyResetTimeoutRef = useRef<number | null>(null)
-  const submitMutation = useMutation({
-    mutationFn: async (draft: CaptureSubmissionDraft) => {
-      await input.callbacks.onSubmit(draft)
-    },
-    onMutate: (draft) => {
-      input.store.patchState({
-        errorMessage: null,
-        reviewDraft: draft,
-      })
-    },
-    onError: (error) => {
-      input.store.showError(toUserError(error))
-    },
-    retry: 1,
-  })
+  const [isSubmitPending, setIsSubmitPending] = useState(false)
 
   useEffect(() => {
     return () => {
@@ -74,7 +58,7 @@ export function useCaptureUiHandlers(
   }
 
   return {
-    isSubmitPending: submitMutation.isPending,
+    isSubmitPending,
     handlers: {
       onLauncherClick: () => {
         input.callbacks.onReset()
@@ -112,7 +96,20 @@ export function useCaptureUiHandlers(
         })
       },
       onSubmit: (draft) => {
-        submitMutation.mutate(draft)
+        setIsSubmitPending(true)
+        input.store.patchState({
+          errorMessage: null,
+          reviewDraft: draft,
+        })
+
+        input.callbacks
+          .onSubmit(draft)
+          .catch((error) => {
+            input.store.showError(toUserError(error))
+          })
+          .finally(() => {
+            setIsSubmitPending(false)
+          })
       },
       onCancel: () => {
         input.callbacks.onReset()

@@ -1,5 +1,5 @@
-import { Badge } from "@crikket/ui/components/ui/badge"
-import { Button } from "@crikket/ui/components/ui/button"
+import { Badge } from "../components/primitives/badge"
+import { Button } from "../components/primitives/button"
 
 export function RecordingDock(props: {
   busy: boolean

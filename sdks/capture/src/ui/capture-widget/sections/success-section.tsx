@@ -1,7 +1,7 @@
-import { Button } from "@crikket/ui/components/ui/button"
-import { Input } from "@crikket/ui/components/ui/input"
-import { Label } from "@crikket/ui/components/ui/label"
 import type { CaptureUiHandlers, CaptureUiState } from "../../types"
+import { Button } from "../components/primitives/button"
+import { Input } from "../components/primitives/input"
+import { Label } from "../components/primitives/label"
 
 export function SuccessSection(props: {
   state: CaptureUiState

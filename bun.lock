@@ -339,16 +339,11 @@
       "name": "@crikket/capture",
       "version": "0.1.0",
       "dependencies": {
-        "@base-ui/react": "catalog:",
         "@crikket/capture-core": "workspace:*",
         "@crikket/shared": "workspace:*",
-        "@crikket/ui": "workspace:*",
         "@tanstack/react-form": "catalog:",
-        "@tanstack/react-query": "catalog:",
-        "lucide-react": "catalog:",
         "react": "catalog:",
         "react-dom": "catalog:",
-        "zod": "catalog:",
       },
       "devDependencies": {
         "@crikket/config": "workspace:*",

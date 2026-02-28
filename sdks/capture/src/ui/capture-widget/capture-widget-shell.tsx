@@ -1,12 +1,12 @@
-import { Button } from "@crikket/ui/components/ui/button"
+import type { CaptureUiHandlers, CaptureUiState } from "../types"
+import { Button } from "./components/primitives/button"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@crikket/ui/components/ui/card"
-import type { CaptureUiHandlers, CaptureUiState } from "../types"
+} from "./components/primitives/card"
 import { ChooserSection } from "./sections/chooser-section"
 import { RecordingDock } from "./sections/recording-dock"
 import { ReviewFormSection } from "./sections/review-form-section"

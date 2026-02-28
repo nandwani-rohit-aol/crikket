@@ -1,4 +1,4 @@
-import { Button } from "@crikket/ui/components/ui/button"
+import { Button } from "../components/primitives/button"
 
 export function ChooserSection(props: {
   busy: boolean
