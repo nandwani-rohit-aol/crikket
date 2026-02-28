@@ -40,6 +40,9 @@ export function mountCaptureUi(
   )
 
   return {
+    setHidden: (hidden) => {
+      hostElement.style.display = hidden ? "none" : ""
+    },
     store,
     unmount: () => {
       reactRoot.unmount()

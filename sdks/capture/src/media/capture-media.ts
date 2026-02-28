@@ -130,6 +130,11 @@ export async function startDisplayRecording(): Promise<RecordingController> {
       rejectStop = reject
     }
   )
+  const handleStreamEnded = () => {
+    if (recorder.state !== "inactive") {
+      recorder.stop()
+    }
+  }
 
   recorder.addEventListener("dataavailable", (event) => {
     if (event.data.size > 0) {
@@ -143,6 +148,7 @@ export async function startDisplayRecording(): Promise<RecordingController> {
 
   recorder.addEventListener("stop", () => {
     for (const currentTrack of stream.getTracks()) {
+      currentTrack.removeEventListener("ended", handleStreamEnded)
       currentTrack.stop()
     }
 
@@ -157,9 +163,16 @@ export async function startDisplayRecording(): Promise<RecordingController> {
     })
   })
 
+  for (const currentTrack of stream.getTracks()) {
+    currentTrack.addEventListener("ended", handleStreamEnded, {
+      once: true,
+    })
+  }
+
   recorder.start(1000)
 
   return {
+    finished: stopPromise,
     startedAt,
     stop: () => {
       if (recorder.state !== "inactive") {

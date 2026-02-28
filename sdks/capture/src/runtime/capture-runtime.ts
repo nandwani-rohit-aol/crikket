@@ -19,6 +19,7 @@ import type {
 import { mountCaptureUi } from "../ui/mount-capture-ui"
 import type { MountedCaptureUi } from "../ui/types"
 import {
+  getDeviceInfo,
   getPageTitle,
   getPageUrl,
   normalizeEndpoint,
@@ -105,6 +106,7 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
 
   unmount(): void {
     this.abortActiveRecording()
+    this.setUiHidden(false)
     this.mountedUi?.unmount()
     this.mountedUi = null
     this.debuggerCollector.dispose()
@@ -121,6 +123,7 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
   }
 
   close(): void {
+    this.setUiHidden(false)
     this.mountedUi?.store.close()
   }
 
@@ -138,14 +141,30 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
     this.debuggerCollector.startSession("video")
 
     try {
+      await this.hideUiForCapture()
       const controller = await startDisplayRecording()
       this.debuggerCollector.markRecordingStarted(controller.startedAt)
       this.activeRecording = controller
+      controller.finished
+        .then((result) => {
+          if (this.activeRecording !== controller) {
+            return
+          }
+
+          this.activeRecording = null
+          this.finalizeCapturedMedia({
+            blob: result.blob,
+            captureType: "video",
+            durationMs: result.durationMs,
+          })
+        })
+        .catch(() => undefined)
 
       return {
         startedAt: controller.startedAt,
       }
     } catch (error) {
+      this.setUiHidden(false)
       this.debuggerCollector.clearSession()
       throw error
     }
@@ -160,22 +179,11 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
     this.activeRecording = null
 
     const result = await recording.stop()
-    const review = this.debuggerCollector.finalizeSession()
-    const media = this.setMedia({
+    this.finalizeCapturedMedia({
       blob: result.blob,
       captureType: "video",
       durationMs: result.durationMs,
     })
-
-    this.currentReview = review
-    if (this.mountedUi) {
-      this.mountedUi.store.showReview({
-        media,
-        warnings: review.warnings,
-        summary: review.debuggerSummary,
-      })
-      this.prefillTitle()
-    }
 
     return result.blob
   }
@@ -187,28 +195,18 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
 
     let blob: Blob
     try {
+      await this.hideUiForCapture()
       blob = await captureScreenshot()
     } catch (error) {
+      this.setUiHidden(false)
       this.debuggerCollector.clearSession()
       throw error
     }
-
-    const review = this.debuggerCollector.finalizeSession()
-    const media = this.setMedia({
+    this.finalizeCapturedMedia({
       blob,
       captureType: "screenshot",
       durationMs: null,
     })
-
-    this.currentReview = review
-    if (this.mountedUi) {
-      this.mountedUi.store.showReview({
-        media,
-        warnings: review.warnings,
-        summary: review.debuggerSummary,
-      })
-      this.prefillTitle()
-    }
 
     return blob
   }
@@ -231,6 +229,7 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
         pageUrl: getPageUrl(),
         pageTitle: getPageTitle(),
         durationMs: this.currentMedia.durationMs,
+        deviceInfo: getDeviceInfo(),
         sdkVersion: CAPTURE_CORE_VERSION,
         debuggerPayload: this.currentReview.debuggerPayload,
         debuggerSummary: this.currentReview.debuggerSummary,
@@ -247,6 +246,7 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
 
   reset(): void {
     this.abortActiveRecording()
+    this.setUiHidden(false)
     this.clearMedia()
     this.currentReview = null
     this.debuggerCollector.clearSession()
@@ -282,6 +282,29 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
     this.currentMedia = null
   }
 
+  private finalizeCapturedMedia(input: {
+    blob: Blob
+    captureType: CapturedMedia["captureType"]
+    durationMs: number | null
+  }): void {
+    this.setUiHidden(false)
+
+    const review = this.debuggerCollector.finalizeSession()
+    const media = this.setMedia(input)
+
+    this.currentReview = review
+    if (!this.mountedUi) {
+      return
+    }
+
+    this.mountedUi.store.showReview({
+      media,
+      warnings: review.warnings,
+      summary: review.debuggerSummary,
+    })
+    this.prefillTitle()
+  }
+
   private abortActiveRecording(): void {
     if (!this.activeRecording) {
       return
@@ -289,6 +312,15 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
 
     this.activeRecording.abort()
     this.activeRecording = null
+  }
+
+  private async hideUiForCapture(): Promise<void> {
+    this.setUiHidden(true)
+    await waitForNextPaint()
+  }
+
+  private setUiHidden(hidden: boolean): void {
+    this.mountedUi?.setHidden(hidden)
   }
 
   private prefillTitle(): void {
@@ -315,4 +347,14 @@ export class CaptureSdkRuntime implements CaptureRuntimeController {
       throw new Error("Capture SDK can only run in a browser environment.")
     }
   }
+}
+
+function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        resolve()
+      })
+    })
+  })
 }

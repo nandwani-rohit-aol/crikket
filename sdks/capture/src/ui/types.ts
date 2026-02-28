@@ -62,6 +62,7 @@ export interface CaptureUiStore {
 }
 
 export interface MountedCaptureUi {
+  setHidden: (hidden: boolean) => void
   store: CaptureUiStore
   unmount: () => void
 }

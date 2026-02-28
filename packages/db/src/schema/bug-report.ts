@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm"
+import { relations, sql } from "drizzle-orm"
 import {
   index,
   integer,
@@ -119,6 +119,38 @@ export const bugReportStorageCleanup = pgTable(
   ]
 )
 
+export const capturePublicKey = pgTable(
+  "capture_public_key",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    key: text("key").notNull().unique(),
+    label: text("label").notNull(),
+    environment: text("environment").notNull(),
+    allowedOrigins: text("allowed_origins")
+      .array()
+      .default(sql`ARRAY[]::text[]`)
+      .notNull(),
+    status: text("status").default("active").notNull(),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    rotatedAt: timestamp("rotated_at"),
+    revokedAt: timestamp("revoked_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("capture_public_key_organizationId_idx").on(table.organizationId),
+    index("capture_public_key_status_idx").on(table.status),
+  ]
+)
+
 export const bugReportRelations = relations(bugReport, ({ one, many }) => ({
   organization: one(organization, {
     fields: [bugReport.organizationId],
@@ -156,6 +188,20 @@ export const bugReportActionRelations = relations(
     bugReport: one(bugReport, {
       fields: [bugReportAction.bugReportId],
       references: [bugReport.id],
+    }),
+  })
+)
+
+export const capturePublicKeyRelations = relations(
+  capturePublicKey,
+  ({ one }) => ({
+    organization: one(organization, {
+      fields: [capturePublicKey.organizationId],
+      references: [organization.id],
+    }),
+    creator: one(user, {
+      fields: [capturePublicKey.createdBy],
+      references: [user.id],
     }),
   })
 )

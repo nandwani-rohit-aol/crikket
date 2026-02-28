@@ -20,6 +20,8 @@
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
+    "@upstash/ratelimit": "catalog:",
+    "@upstash/redis": "catalog:",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "hono": "catalog:",

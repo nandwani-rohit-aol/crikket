@@ -15,10 +15,12 @@ import { ZodToJsonSchemaConverter } from "@orpc/zod/zod4"
 import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
+import { handleCaptureSubmit } from "./capture-submit-route"
 
 const app = new Hono()
 const allowedCorsOrigins = env.CORS_ORIGINS
 const fallbackCorsOrigin = allowedCorsOrigins[0] ?? env.BETTER_AUTH_URL
+const captureShareOrigin = allowedCorsOrigins[0] ?? env.BETTER_AUTH_URL
 const MAX_RPC_REQUEST_BODY_BYTES = 110 * 1024 * 1024
 const STORAGE_CLEANUP_INTERVAL_MS = 5 * 60 * 1000
 type RateLimitHeaders = Record<string, string>
@@ -108,18 +110,27 @@ app.use(logger())
 app.use(
   "/*",
   cors({
-    origin: (origin) => {
+    origin: (origin, c) => {
+      if (c.req.path === "/api/embed/bug-reports" && origin.trim().length > 0) {
+        return origin
+      }
       if (allowedCorsOrigins.includes(origin)) return origin
       if (origin.startsWith("chrome-extension://")) return origin
       return fallbackCorsOrigin
     },
     allowMethods: ["GET", "POST", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Authorization", "Content-Type", "x-crikket-public-key"],
     credentials: true,
   })
 )
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw))
+app.post("/api/embed/bug-reports", (c) => {
+  return handleCaptureSubmit({
+    request: c.req.raw,
+    shareOrigin: captureShareOrigin,
+  })
+})
 
 const cleanupInterval = setInterval(() => {
   runAttachmentCleanupPass({ limit: 50 }).catch((error: unknown) => {

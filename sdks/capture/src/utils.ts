@@ -85,6 +85,22 @@ export function getPageTitle(): string {
   return document.title.trim().slice(0, 300)
 }
 
+export function getDeviceInfo(): {
+  browser?: string
+  os?: string
+  viewport?: string
+} {
+  if (typeof navigator === "undefined" || typeof window === "undefined") {
+    return {}
+  }
+
+  return {
+    browser: navigator.userAgent || undefined,
+    os: navigator.platform || undefined,
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+  }
+}
+
 export function formatDuration(durationMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(durationMs / 1000))
   const minutes = Math.floor(totalSeconds / 60)

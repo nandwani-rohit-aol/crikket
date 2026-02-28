@@ -1,5 +1,7 @@
 import type { CaptureSubmitRequest, CaptureSubmitResult } from "../types"
 
+const ABSOLUTE_HTTP_URL_REGEX = /^https?:\/\//
+
 export async function defaultSubmitTransport(
   request: CaptureSubmitRequest
 ): Promise<CaptureSubmitResult> {
@@ -14,6 +16,7 @@ export async function defaultSubmitTransport(
   formData.set("pageTitle", request.report.pageTitle)
   formData.set("sdkVersion", request.report.sdkVersion)
   formData.set("durationMs", String(request.report.durationMs ?? ""))
+  formData.set("deviceInfo", JSON.stringify(request.report.deviceInfo ?? {}))
   formData.set(
     "debuggerSummary",
     JSON.stringify(request.report.debuggerSummary)
@@ -44,7 +47,10 @@ export async function defaultSubmitTransport(
   }
 
   return {
-    shareUrl: resolveString(responsePayload, ["shareUrl", "url"]),
+    shareUrl: resolveShareUrl(
+      request.config.endpoint,
+      resolveString(responsePayload, ["shareUrl", "url"])
+    ),
     reportId: resolveString(responsePayload, ["id", "reportId"]),
     raw: responsePayload,
   }
@@ -100,6 +106,21 @@ function resolveString(
   }
 
   return undefined
+}
+
+function resolveShareUrl(
+  endpoint: string,
+  shareUrl: string | undefined
+): string | undefined {
+  if (!shareUrl) {
+    return undefined
+  }
+
+  if (ABSOLUTE_HTTP_URL_REGEX.test(shareUrl)) {
+    return shareUrl
+  }
+
+  return `${endpoint}${shareUrl.startsWith("/") ? shareUrl : `/${shareUrl}`}`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

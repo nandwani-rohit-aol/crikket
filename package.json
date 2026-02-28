@@ -25,7 +25,7 @@
       "drizzle-orm": "^0.45.1",
       "@types/pg": "^8.16.0",
       "@upstash/ratelimit": "^2.0.8",
-      "@upstash/redis": "^1.36.2",
+      "@upstash/redis": "^1.36.3",
       "class-variance-authority": "^0.7.1",
       "@base-ui/react": "^1.0.0",
       "clsx": "^2.1.1",

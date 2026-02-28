@@ -47,6 +47,11 @@ export interface CaptureSubmitRequest {
     pageTitle: string
     durationMs: number | null
     sdkVersion: string
+    deviceInfo?: {
+      browser?: string
+      os?: string
+      viewport?: string
+    }
     debuggerPayload?: BugReportDebuggerPayload
     debuggerSummary: CaptureDebuggerSummary
     media: Blob
@@ -84,6 +89,10 @@ export interface BridgePayload {
 
 export interface RecordingController {
   startedAt: number
+  finished: Promise<{
+    blob: Blob
+    durationMs: number
+  }>
   stop: () => Promise<{
     blob: Blob
     durationMs: number

@@ -64,6 +64,8 @@ export const metadataInputSchema = z
       .optional(),
     thumbnailUrl: z.string().url().optional(),
     pageTitle: z.string().max(300).optional(),
+    sdkVersion: z.string().max(40).optional(),
+    submittedVia: z.string().max(40).optional(),
   })
   .optional()
 
