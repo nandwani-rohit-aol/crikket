@@ -62,6 +62,10 @@ export function createSessionId(): string {
 
 export function toUserError(error: unknown): string {
   if (error instanceof Error && error.message.trim().length > 0) {
+    if (error.message.includes("Failed to fetch")) {
+      return "The upload failed before the server could respond. Retry with a shorter recording or a screenshot."
+    }
+
     return error.message
   }
 

@@ -4,37 +4,19 @@ import { runTurnstileChallenge } from "./turnstile"
 const ABSOLUTE_HTTP_URL_REGEX = /^https?:\/\//
 const BUG_REPORTS_PATH_SUFFIX = "/bug-reports"
 const CAPTURE_CHALLENGE_REQUIRED_CODE = "CAPTURE_CHALLENGE_REQUIRED"
+const MAX_CAPTURE_REQUEST_BYTES = 95 * 1024 * 1024
+const MULTIPART_BASE_OVERHEAD_BYTES = 16 * 1024
+const MULTIPART_FIELD_OVERHEAD_BYTES = 256
+const MULTIPART_FILE_OVERHEAD_BYTES = 1024
+const FILE_SIZE_LIMIT_MESSAGE =
+  "This recording is too large to upload reliably. Retry with a shorter recording or a screenshot."
 
 export async function defaultSubmitTransport(
   request: CaptureSubmitRequest
 ): Promise<CaptureSubmitResult> {
   const submitUrl = `${request.config.host}${request.config.submitPath}`
+  const { formData } = buildSubmitFormData(request)
   const submitToken = await fetchCaptureSubmitToken(request)
-  const formData = new FormData()
-
-  formData.set("title", request.report.title)
-  formData.set("description", request.report.description)
-  formData.set("priority", request.report.priority)
-  formData.set("visibility", request.report.visibility)
-  formData.set("captureType", request.report.captureType)
-  formData.set("pageUrl", request.report.pageUrl)
-  formData.set("pageTitle", request.report.pageTitle)
-  formData.set("sdkVersion", request.report.sdkVersion)
-  formData.set("durationMs", String(request.report.durationMs ?? ""))
-  formData.set("deviceInfo", JSON.stringify(request.report.deviceInfo ?? {}))
-  formData.set(
-    "debuggerSummary",
-    JSON.stringify(request.report.debuggerSummary)
-  )
-  formData.set(
-    "debuggerPayload",
-    JSON.stringify(request.report.debuggerPayload ?? null)
-  )
-  formData.set(
-    "capture",
-    request.report.media,
-    request.report.captureType === "screenshot" ? "capture.png" : "capture.webm"
-  )
 
   const response = await fetch(submitUrl, {
     method: "POST",
@@ -60,6 +42,75 @@ export async function defaultSubmitTransport(
     reportId: resolveString(responsePayload, ["id", "reportId"]),
     raw: responsePayload,
   }
+}
+
+function buildSubmitFormData(request: CaptureSubmitRequest): {
+  formData: FormData
+} {
+  const fileName =
+    request.report.captureType === "screenshot" ? "capture.png" : "capture.webm"
+  const serializedFields = new Map<string, string>([
+    ["title", request.report.title],
+    ["description", request.report.description],
+    ["priority", request.report.priority],
+    ["visibility", request.report.visibility],
+    ["captureType", request.report.captureType],
+    ["pageUrl", request.report.pageUrl],
+    ["pageTitle", request.report.pageTitle],
+    ["sdkVersion", request.report.sdkVersion],
+    ["durationMs", String(request.report.durationMs ?? "")],
+    ["deviceInfo", JSON.stringify(request.report.deviceInfo ?? {})],
+    ["debuggerSummary", JSON.stringify(request.report.debuggerSummary)],
+  ])
+
+  const serializedDebuggerPayload = request.report.debuggerPayload
+    ? JSON.stringify(request.report.debuggerPayload)
+    : null
+  if (serializedDebuggerPayload) {
+    serializedFields.set("debuggerPayload", serializedDebuggerPayload)
+  }
+
+  if (
+    estimateMultipartRequestSize({
+      fields: serializedFields,
+      file: {
+        contentType:
+          request.report.media.type ||
+          (request.report.captureType === "screenshot"
+            ? "image/png"
+            : "video/webm"),
+        name: fileName,
+        size: request.report.media.size,
+      },
+    }) > MAX_CAPTURE_REQUEST_BYTES
+  ) {
+    serializedFields.delete("debuggerPayload")
+  }
+
+  if (
+    estimateMultipartRequestSize({
+      fields: serializedFields,
+      file: {
+        contentType:
+          request.report.media.type ||
+          (request.report.captureType === "screenshot"
+            ? "image/png"
+            : "video/webm"),
+        name: fileName,
+        size: request.report.media.size,
+      },
+    }) > MAX_CAPTURE_REQUEST_BYTES
+  ) {
+    throw new Error(FILE_SIZE_LIMIT_MESSAGE)
+  }
+
+  const formData = new FormData()
+  for (const [key, value] of serializedFields) {
+    formData.set(key, value)
+  }
+  formData.set("capture", request.report.media, fileName)
+
+  return { formData }
 }
 
 async function fetchCaptureSubmitToken(
@@ -219,4 +270,34 @@ function resolveCaptureTokenPath(submitPath: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function estimateMultipartRequestSize(input: {
+  fields: Map<string, string>
+  file: {
+    contentType: string
+    name: string
+    size: number
+  }
+}): number {
+  let totalBytes = MULTIPART_BASE_OVERHEAD_BYTES
+
+  for (const [key, value] of input.fields) {
+    totalBytes +=
+      getUtf8ByteLength(key) +
+      getUtf8ByteLength(value) +
+      MULTIPART_FIELD_OVERHEAD_BYTES
+  }
+
+  totalBytes +=
+    input.file.size +
+    getUtf8ByteLength(input.file.name) +
+    getUtf8ByteLength(input.file.contentType) +
+    MULTIPART_FILE_OVERHEAD_BYTES
+
+  return totalBytes
+}
+
+function getUtf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).length
 }

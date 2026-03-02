@@ -7,6 +7,9 @@ import {
   resolveRecordingMimeType,
 } from "./display-capture"
 
+const RECORDING_AUDIO_BITS_PER_SECOND = 64_000
+const RECORDING_VIDEO_BITS_PER_SECOND = 550_000
+
 export async function startDisplayRecording(): Promise<RecordingController> {
   const stream = await requestDisplayStream(true)
   assertBrowserTabSurface(stream)
@@ -14,10 +17,18 @@ export async function startDisplayRecording(): Promise<RecordingController> {
   await prepareCaptureVideo(warmupVideo, stream)
   releaseCaptureVideo(warmupVideo)
   const mimeType = resolveRecordingMimeType()
-  const recorder =
+  const recorderOptions =
     mimeType.length > 0
-      ? new MediaRecorder(stream, { mimeType })
-      : new MediaRecorder(stream)
+      ? {
+          audioBitsPerSecond: RECORDING_AUDIO_BITS_PER_SECOND,
+          mimeType,
+          videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND,
+        }
+      : {
+          audioBitsPerSecond: RECORDING_AUDIO_BITS_PER_SECOND,
+          videoBitsPerSecond: RECORDING_VIDEO_BITS_PER_SECOND,
+        }
+  const recorder = new MediaRecorder(stream, recorderOptions)
 
   const startedAt = Date.now()
   const chunks: Blob[] = []

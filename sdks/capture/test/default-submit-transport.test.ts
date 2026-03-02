@@ -187,4 +187,26 @@ describe("default submit transport regression", () => {
       "Capture submission failed with status 502."
     )
   })
+
+  it("fails before making network requests when the upload is too large", async () => {
+    const fetchMock = installFetchMock(() => {
+      return Promise.resolve(new Response(null, { status: 204 }))
+    })
+    const oversizedRequest = {
+      ...request,
+      report: {
+        ...request.report,
+        captureType: "video",
+        media: {
+          size: 96 * 1024 * 1024,
+          type: "video/webm",
+        } as Blob,
+      },
+    } satisfies CaptureSubmitRequest
+
+    await expect(defaultSubmitTransport(oversizedRequest)).rejects.toThrow(
+      "This recording is too large to upload reliably. Retry with a shorter recording or a screenshot."
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })
