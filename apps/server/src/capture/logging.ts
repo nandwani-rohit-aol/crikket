@@ -12,7 +12,6 @@ export type CaptureSecurityReasonCode =
   | "missing_public_key"
   | "missing_submit_token"
   | "missing_turnstile_token"
-  | "protection_not_ready"
   | "rate_limited"
   | "replayed_submit_token"
   | "turnstile_verification_failed"
@@ -94,7 +93,6 @@ function isCaptureSecurityReasonCode(
       "missing_public_key",
       "missing_submit_token",
       "missing_turnstile_token",
-      "protection_not_ready",
       "rate_limited",
       "replayed_submit_token",
       "turnstile_verification_failed",

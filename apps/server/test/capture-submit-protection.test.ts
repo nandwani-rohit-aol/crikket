@@ -10,7 +10,6 @@ const replayKeys = new Set<string>()
 mock.module("@crikket/env/server", () => ({
   env: {
     CAPTURE_SUBMIT_TOKEN_SECRET: "01234567890123456789012345678901",
-    NODE_ENV: "development",
     TURNSTILE_SECRET_KEY: "turnstile_secret",
     TURNSTILE_SITE_KEY: "turnstile_site",
     UPSTASH_REDIS_REST_TOKEN: "upstash_token",

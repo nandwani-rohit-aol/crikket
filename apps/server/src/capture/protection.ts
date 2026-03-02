@@ -1,7 +1,7 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto"
 import { env } from "@crikket/env/server"
 import { ORPCError } from "@orpc/server"
-import { getCaptureRedis, hasCaptureRedisConfig } from "./security"
+import { getCaptureRedis } from "./security"
 
 const CAPTURE_SUBMIT_TOKEN_VERSION = 1
 const CAPTURE_SUBMIT_TOKEN_TTL_MS = 5 * 60 * 1000
@@ -25,35 +25,37 @@ interface TurnstileVerifyResponse {
   success?: unknown
 }
 
+interface TurnstileConfig {
+  secretKey: string
+  siteKey: string
+}
+
 export function isCaptureSubmitProtectionEnabled(): boolean {
   return Boolean(env.CAPTURE_SUBMIT_TOKEN_SECRET)
 }
 
-export function assertCaptureSubmitProtectionReady(): void {
-  if (!isCaptureSubmitProtectionEnabled()) {
-    return
+function getTurnstileConfig(): TurnstileConfig | null {
+  if (!(env.TURNSTILE_SECRET_KEY && env.TURNSTILE_SITE_KEY)) {
+    return null
   }
 
-  if (
-    env.NODE_ENV === "production" &&
-    !(
-      env.TURNSTILE_SECRET_KEY &&
-      env.TURNSTILE_SITE_KEY &&
-      hasCaptureRedisConfig()
-    )
-  ) {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      data: {
-        reasonCode: "protection_not_ready",
-      },
-      message:
-        "Capture protection in production requires Turnstile and Upstash Redis.",
-    })
+  return {
+    secretKey: env.TURNSTILE_SECRET_KEY,
+    siteKey: env.TURNSTILE_SITE_KEY,
   }
 }
 
+function requireTurnstileConfig(): TurnstileConfig {
+  const config = getTurnstileConfig()
+  if (!config) {
+    throw new Error("Turnstile verification called without configuration.")
+  }
+
+  return config
+}
+
 export function getCaptureProtectionSiteKey(): string | null {
-  return env.TURNSTILE_SITE_KEY ?? null
+  return getTurnstileConfig()?.siteKey ?? null
 }
 
 export function shouldEnforceTurnstile(): boolean {
@@ -61,20 +63,7 @@ export function shouldEnforceTurnstile(): boolean {
     return false
   }
 
-  if (env.TURNSTILE_SECRET_KEY && env.TURNSTILE_SITE_KEY) {
-    return true
-  }
-
-  if (env.NODE_ENV === "production") {
-    throw new ORPCError("INTERNAL_SERVER_ERROR", {
-      data: {
-        reasonCode: "protection_not_ready",
-      },
-      message: "Capture protection requires Turnstile in production.",
-    })
-  }
-
-  return false
+  return getTurnstileConfig() !== null
 }
 
 export function createCaptureSubmitToken(input: {
@@ -178,20 +167,7 @@ export async function verifyTurnstileToken(input: {
   remoteIp?: string | null
   token: string
 }): Promise<void> {
-  const siteKey = env.TURNSTILE_SITE_KEY
-  const secretKey = env.TURNSTILE_SECRET_KEY
-  if (!(siteKey && secretKey)) {
-    if (env.NODE_ENV === "production") {
-      throw new ORPCError("INTERNAL_SERVER_ERROR", {
-        data: {
-          reasonCode: "protection_not_ready",
-        },
-        message: "Turnstile is not configured for capture protection.",
-      })
-    }
-
-    return
-  }
+  const { secretKey } = requireTurnstileConfig()
 
   const requestBody = new URLSearchParams({
     response: input.token,
@@ -280,16 +256,6 @@ async function consumeCaptureSubmitToken(input: {
 }): Promise<void> {
   const redis = getCaptureRedis()
   if (!redis) {
-    if (env.NODE_ENV === "production") {
-      throw new ORPCError("INTERNAL_SERVER_ERROR", {
-        data: {
-          reasonCode: "protection_not_ready",
-        },
-        message:
-          "Capture protection requires Upstash Redis to prevent token replay.",
-      })
-    }
-
     return
   }
 

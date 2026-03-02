@@ -15,6 +15,23 @@ const CAPTURE_SUBMIT_PROTECTION_PATH = fileURLToPath(
 const replayKeys = new Set<string>()
 const rateLimitedPrefixes = new Set<string>()
 const validOrigin = "https://example.com"
+const mockedEnv: {
+  BETTER_AUTH_URL: string
+  CAPTURE_SUBMIT_TOKEN_SECRET: string
+  CORS_ORIGINS: string[]
+  TURNSTILE_SECRET_KEY: string | undefined
+  TURNSTILE_SITE_KEY: string | undefined
+  UPSTASH_REDIS_REST_TOKEN: string | undefined
+  UPSTASH_REDIS_REST_URL: string | undefined
+} = {
+  BETTER_AUTH_URL: "https://app.crikket.io",
+  CAPTURE_SUBMIT_TOKEN_SECRET: "01234567890123456789012345678901",
+  CORS_ORIGINS: ["https://app.crikket.io"],
+  TURNSTILE_SECRET_KEY: "turnstile_secret",
+  TURNSTILE_SITE_KEY: "turnstile_site",
+  UPSTASH_REDIS_REST_TOKEN: "upstash_token",
+  UPSTASH_REDIS_REST_URL: "https://upstash.example.com",
+}
 const publicKeyRecord = {
   allowedOrigins: [validOrigin],
   createdAt: new Date(),
@@ -32,16 +49,7 @@ let activePublicKeyValue = publicKeyRecord.key
 let activePublicKeyStatus: "active" | "revoked" = "active"
 
 mock.module("@crikket/env/server", () => ({
-  env: {
-    BETTER_AUTH_URL: "https://app.crikket.io",
-    CAPTURE_SUBMIT_TOKEN_SECRET: "01234567890123456789012345678901",
-    CORS_ORIGINS: ["https://app.crikket.io"],
-    NODE_ENV: "development",
-    TURNSTILE_SECRET_KEY: "turnstile_secret",
-    TURNSTILE_SITE_KEY: "turnstile_site",
-    UPSTASH_REDIS_REST_TOKEN: "upstash_token",
-    UPSTASH_REDIS_REST_URL: "https://upstash.example.com",
-  },
+  env: mockedEnv,
 }))
 
 mock.module("@crikket/bug-reports/lib/capture-public-key", () => ({
@@ -152,6 +160,10 @@ mock.module("@upstash/ratelimit", () => ({
 afterEach(() => {
   activePublicKeyStatus = "active"
   activePublicKeyValue = publicKeyRecord.key
+  mockedEnv.TURNSTILE_SECRET_KEY = "turnstile_secret"
+  mockedEnv.TURNSTILE_SITE_KEY = "turnstile_site"
+  mockedEnv.UPSTASH_REDIS_REST_TOKEN = "upstash_token"
+  mockedEnv.UPSTASH_REDIS_REST_URL = "https://upstash.example.com"
   replayKeys.clear()
   rateLimitedPrefixes.clear()
   mock.restore()
@@ -260,6 +272,28 @@ describe("capture token route", () => {
     })
 
     globalThis.fetch = originalFetch
+  })
+
+  it("mints a token without challenging when turnstile is unset", async () => {
+    mockedEnv.TURNSTILE_SECRET_KEY = undefined
+    mockedEnv.TURNSTILE_SITE_KEY = undefined
+
+    const { handleCaptureToken } = await import(CAPTURE_TOKEN_ROUTE_PATH)
+    const response = await handleCaptureToken({
+      request: new Request("https://api.crikket.io/api/embed/capture-token", {
+        headers: {
+          origin: validOrigin,
+          "content-type": "application/json",
+          "x-crikket-public-key": publicKeyRecord.key,
+        },
+        method: "POST",
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      token: expect.any(String),
+    })
   })
 
   it("returns rate-limited when the token bucket blocks the request", async () => {
@@ -404,6 +438,36 @@ describe("capture submit route", () => {
       id: "br_123",
       reportId: "br_123",
       shareUrl: "https://app.crikket.io/s/br_123",
+    })
+  })
+
+  it("accepts a valid protected submit without redis", async () => {
+    mockedEnv.UPSTASH_REDIS_REST_TOKEN = undefined
+    mockedEnv.UPSTASH_REDIS_REST_URL = undefined
+
+    const { createCaptureSubmitToken } = await import(
+      CAPTURE_SUBMIT_PROTECTION_PATH
+    )
+    const authorization = createCaptureSubmitToken({
+      keyId: publicKeyRecord.id,
+      origin: validOrigin,
+    })
+    expect(authorization).not.toBeNull()
+
+    const { handleCaptureSubmit } = await import(CAPTURE_SUBMIT_ROUTE_PATH)
+    const response = await handleCaptureSubmit({
+      request: createSubmitRequest({
+        headers: {
+          "x-crikket-capture-token": authorization!.token,
+        },
+      }),
+      shareOrigin: "https://app.crikket.io",
+    })
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({
+      id: "br_123",
+      reportId: "br_123",
     })
   })
 

@@ -11,7 +11,6 @@ import { ORPCError } from "@orpc/server"
 import { z } from "zod"
 import { logCaptureSecurityError, logCaptureSecurityEvent } from "./logging"
 import {
-  assertCaptureSubmitProtectionReady,
   isCaptureSubmitProtectionEnabled,
   verifyCaptureSubmitToken,
 } from "./protection"
@@ -163,7 +162,6 @@ export async function handleCaptureSubmit(input: {
 
   try {
     assertCaptureRequestBodyLength(input.request)
-    assertCaptureSubmitProtectionReady()
 
     const publicKey = input.request.headers.get("x-crikket-public-key")?.trim()
     if (!publicKey) {
