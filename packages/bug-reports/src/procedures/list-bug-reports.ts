@@ -61,7 +61,7 @@ export interface BugReportListItem {
   thumbnail: string | undefined
   attachmentUrl: string | undefined
   attachmentType: "video" | "screenshot" | undefined
-  uploader: {
+  uploader?: {
     name: string
     avatar: string | undefined
   }
@@ -224,6 +224,13 @@ async function mapBugReportListItem(
     !isExpiringSignedUrl(metadata.thumbnailUrl)
       ? metadata.thumbnailUrl
       : undefined
+  const reporterName = report.reporter?.name?.trim()
+  const uploader = reporterName
+    ? {
+        name: reporterName,
+        avatar: report.reporter?.image ?? undefined,
+      }
+    : undefined
 
   return {
     id: report.id,
@@ -265,10 +272,7 @@ async function mapBugReportListItem(
     priority: normalizePriority(report.priority),
     tags: Array.isArray(report.tags) ? report.tags : [],
     url: report.url ?? undefined,
-    uploader: {
-      name: report.reporter?.name || "Unknown User",
-      avatar: report.reporter?.image ?? undefined,
-    },
+    uploader,
     createdAt: report.createdAt.toISOString(),
     updatedAt: report.updatedAt.toISOString(),
   }

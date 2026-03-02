@@ -53,6 +53,7 @@ export function BugReportSidebar({
   onEntrySelect,
 }: BugReportSidebarProps) {
   const deviceInfo = data.deviceInfo as DeviceInfo | null
+  const reporterName = data.reporter?.name?.trim()
 
   return (
     <div className="z-20 flex h-full w-full flex-col bg-background shadow-xl md:relative md:top-0 md:border-l md:shadow-none">
@@ -111,10 +112,7 @@ export function BugReportSidebar({
                   label="Priority"
                   value={data.priority}
                 />
-                <DetailRow
-                  label="Reporter"
-                  value={data.reporter?.name ?? "Unknown"}
-                />
+                <DetailRow label="Reporter" value={reporterName} />
                 <DetailRow label="Org" value={data.organization.name} />
                 <div className="pt-2">
                   <span className="mb-1 block font-medium text-muted-foreground text-xs">
