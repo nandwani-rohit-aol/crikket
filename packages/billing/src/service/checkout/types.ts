@@ -73,7 +73,7 @@ export function isUpdatableSubscriptionStatus(status: unknown): boolean {
 export function isSubscriptionBoundToOrganization(
   subscription: {
     metadata: unknown
-    customer: { externalId: string | null }
+    customer?: { externalId?: string | null | undefined } | null
   },
   organizationId: string
 ): boolean {
@@ -82,5 +82,5 @@ export function isSubscriptionBoundToOrganization(
     return true
   }
 
-  return subscription.customer.externalId === organizationId
+  return subscription.customer?.externalId === organizationId
 }

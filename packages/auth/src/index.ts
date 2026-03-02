@@ -1,11 +1,12 @@
-import { polarClient } from "@crikket/billing/lib/payments"
 import { assertHostedPaymentsConfiguration } from "@crikket/billing/service/checkout/shared"
 import { assertOrganizationCanAddMembers } from "@crikket/billing/service/entitlements/organization-entitlements"
 import { processPolarWebhookPayload } from "@crikket/billing/service/webhooks/process-polar-webhook-payload"
 import { db } from "@crikket/db"
 import * as schema from "@crikket/db/schema/auth"
+import { getPolarSdkConfig } from "@crikket/env/polar"
 import { env } from "@crikket/env/server"
 import { checkout, polar, portal, webhooks } from "@polar-sh/better-auth"
+import { Polar } from "@polar-sh/sdk"
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { admin } from "better-auth/plugins/admin"
@@ -76,6 +77,7 @@ const polarCheckout = checkout({
 })
 
 const polarPortal = portal()
+const polarClient = new Polar(getPolarSdkConfig())
 
 const paymentsPlugins = env.ENABLE_PAYMENTS
   ? (() => {

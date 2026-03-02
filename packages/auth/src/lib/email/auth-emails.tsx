@@ -27,12 +27,14 @@ type SendOrganizationInvitationEmailInput = {
 
 const OTP_SUBJECTS: Record<AuthEmailOtpType, string> = {
   "email-verification": "Verify your email",
+  "change-email": "Confirm your new email",
   "forget-password": "Reset your password",
   "sign-in": "Your sign-in code",
 }
 
 const OTP_ACTION_URLS: Record<AuthEmailOtpType, string> = {
   "email-verification": "/verify-email",
+  "change-email": "/settings/user",
   "forget-password": "/forgot-password",
   "sign-in": "/login",
 }

@@ -4,6 +4,7 @@ import { AuthEmailLayout } from "./auth-email-layout"
 
 export type AuthEmailOtpType =
   | "email-verification"
+  | "change-email"
   | "forget-password"
   | "sign-in"
 
@@ -27,6 +28,12 @@ const OTP_COPY: Record<
     previewText: "Your verification code is ready.",
     description: "Use this code to verify your account email.",
     buttonText: "Open verification page",
+  },
+  "change-email": {
+    title: "Confirm your new email",
+    previewText: "Your email change code is ready.",
+    description: "Use this code to confirm your new account email.",
+    buttonText: "Open account settings",
   },
   "forget-password": {
     title: "Reset your password",
