@@ -284,6 +284,7 @@ backup_file_if_exists() {
 ensure_repo_layout() {
   [[ -f "${ROOT_DIR}/docker-compose.yml" ]] || die "Run this script from the Crikket repository."
   [[ -f "${ROOT_DIR}/docker-compose.caddy.yml" ]] || die "Missing docker-compose.caddy.yml."
+  [[ -f "${ROOT_DIR}/docker-compose.external-db.yml" ]] || die "Missing docker-compose.external-db.yml."
   [[ -d "${ROOT_DIR}/apps/server" ]] || die "Missing apps/server."
   [[ -d "${ROOT_DIR}/apps/web" ]] || die "Missing apps/web."
 }
@@ -318,11 +319,6 @@ derive_cookie_domain() {
 
   frontend_host="${frontend_host%%:*}"
   backend_host="${backend_host%%:*}"
-
-  if [[ "$frontend_host" == "$backend_host" ]]; then
-    printf '\n'
-    return 0
-  fi
 
   shared_suffix="$(
     awk -v left="$frontend_host" -v right="$backend_host" '
@@ -365,31 +361,25 @@ derive_cookie_domain() {
 }
 
 configure_domains() {
-  local frontend_default backend_default separate_backend_default existing_cookie_domain
+  local frontend_default backend_default existing_cookie_domain
 
   frontend_default="$(default_host_from_url "$WEB_ENV_FILE" "NEXT_PUBLIC_APP_URL" "app.example.com")"
   backend_default="$(default_host_from_url "$WEB_ENV_FILE" "NEXT_PUBLIC_SERVER_URL" "api.example.com")"
   existing_cookie_domain="$(default_value "$SERVER_ENV_FILE" "BETTER_AUTH_COOKIE_DOMAIN" "")"
-  separate_backend_default="yes"
 
   FRONTEND_HOST="$(normalize_host_input "$(prompt_required_value "Frontend domain" "$frontend_default")")"
   validate_host_input "$FRONTEND_HOST" || die "Frontend domain must be a hostname like app.example.com"
+  BACKEND_HOST="$(normalize_host_input "$(prompt_required_value "Backend/API domain" "$backend_default")")"
+  validate_host_input "$BACKEND_HOST" || die "Backend/API domain must be a hostname like api.example.com"
 
-  if [[ "$frontend_default" == "$backend_default" ]]; then
-    separate_backend_default="no"
-  fi
-
-  if prompt_yes_no "Use a separate backend/API domain" "$separate_backend_default"; then
-    BACKEND_HOST="$(normalize_host_input "$(prompt_required_value "Backend/API domain" "$backend_default")")"
-    validate_host_input "$BACKEND_HOST" || die "Backend/API domain must be a hostname like api.example.com"
-  else
-    BACKEND_HOST="$FRONTEND_HOST"
+  if [[ "$FRONTEND_HOST" == "$BACKEND_HOST" ]]; then
+    die "Frontend and backend domains must be different."
   fi
 
   build_public_urls
   BETTER_AUTH_COOKIE_DOMAIN="$(derive_cookie_domain "$FRONTEND_HOST" "$BACKEND_HOST")"
 
-  if [[ -z "$BETTER_AUTH_COOKIE_DOMAIN" && "$FRONTEND_HOST" != "$BACKEND_HOST" && -n "$existing_cookie_domain" ]]; then
+  if [[ -z "$BETTER_AUTH_COOKIE_DOMAIN" && -n "$existing_cookie_domain" ]]; then
     BETTER_AUTH_COOKIE_DOMAIN="$existing_cookie_domain"
   fi
 }
@@ -427,28 +417,35 @@ configure_proxy() {
 }
 
 configure_bindings() {
-  local localhost_only_default
+  local localhost_only_default postgres_port_default
 
   localhost_only_default="yes"
+  postgres_port_default="127.0.0.1:5432"
   if [[ "$PROXY_MODE" != "caddy" ]]; then
     if prompt_yes_no "Bind container ports to localhost only" "$localhost_only_default"; then
       WEB_PORT="$(default_value "$ROOT_ENV_FILE" "WEB_PORT" "127.0.0.1:3001")"
       SERVER_PORT="$(default_value "$ROOT_ENV_FILE" "SERVER_PORT" "127.0.0.1:3000")"
-      POSTGRES_PORT="$(default_value "$ROOT_ENV_FILE" "POSTGRES_PORT" "127.0.0.1:5432")"
     else
       WEB_PORT="$(default_value "$ROOT_ENV_FILE" "WEB_PORT" "3001")"
       SERVER_PORT="$(default_value "$ROOT_ENV_FILE" "SERVER_PORT" "3000")"
-      POSTGRES_PORT="$(default_value "$ROOT_ENV_FILE" "POSTGRES_PORT" "5432")"
+      postgres_port_default="5432"
     fi
   else
     WEB_PORT="$(default_value "$ROOT_ENV_FILE" "WEB_PORT" "127.0.0.1:3001")"
     SERVER_PORT="$(default_value "$ROOT_ENV_FILE" "SERVER_PORT" "127.0.0.1:3000")"
-    POSTGRES_PORT="$(default_value "$ROOT_ENV_FILE" "POSTGRES_PORT" "127.0.0.1:5432")"
+  fi
+
+  if [[ "$DATABASE_MODE" == "bundled" ]]; then
+    POSTGRES_PORT="$(default_value "$ROOT_ENV_FILE" "POSTGRES_PORT" "$postgres_port_default")"
+  else
+    POSTGRES_PORT=""
   fi
 
   validate_host_port_binding "$WEB_PORT" || die "Web host binding must be a port or host:port pair."
   validate_host_port_binding "$SERVER_PORT" || die "API host binding must be a port or host:port pair."
-  validate_host_port_binding "$POSTGRES_PORT" || die "Postgres host binding must be a port or host:port pair."
+  if [[ "$DATABASE_MODE" == "bundled" ]]; then
+    validate_host_port_binding "$POSTGRES_PORT" || die "Postgres host binding must be a port or host:port pair."
+  fi
 }
 
 configure_database() {
@@ -458,14 +455,15 @@ configure_database() {
   POSTGRES_DB="$(default_value "$ROOT_ENV_FILE" "POSTGRES_DB" "crikket")"
   POSTGRES_PASSWORD="$(default_value "$ROOT_ENV_FILE" "POSTGRES_PASSWORD" "$(generate_secret 32)")"
 
-  external_database_default="no"
+  external_database_default="$( [[ "$(default_value "$ROOT_ENV_FILE" "CRIKKET_DATABASE_MODE" "bundled")" == "external" ]] && printf 'yes' || printf 'no' )"
   database_default="$(default_value "$SERVER_ENV_FILE" "DATABASE_URL" "")"
 
-  if [[ -n "$database_default" && "$database_default" != *"@postgres:5432/"* ]]; then
+  if [[ "$external_database_default" != "yes" && -n "$database_default" && "$database_default" != *"@postgres:5432/"* ]]; then
     external_database_default="yes"
   fi
 
   if prompt_yes_no "Use an external PostgreSQL database" "$external_database_default"; then
+    DATABASE_MODE="external"
     DATABASE_URL="$(prompt_required_value "Database URL" "$database_default")"
     if [[ "$DATABASE_URL" != postgresql://* && "$DATABASE_URL" != postgres://* ]]; then
       die "Database URL must start with postgresql:// or postgres://"
@@ -473,6 +471,7 @@ configure_database() {
     return 0
   fi
 
+  DATABASE_MODE="bundled"
   DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
 }
 
@@ -551,23 +550,35 @@ configure_optional_services() {
 }
 
 write_root_env() {
-  cat >"$ROOT_ENV_FILE" <<EOF
-# Generated by scripts/setup.sh
-# Docker Compose host port bindings.
+  local postgres_bindings=""
+  local postgres_settings=""
 
-CRIKKET_PROXY_MODE=${PROXY_MODE}
-WEB_PORT=${WEB_PORT}
-SERVER_PORT=${SERVER_PORT}
-POSTGRES_PORT=${POSTGRES_PORT}
-CADDY_HTTP_PORT=${CADDY_HTTP_PORT}
-CADDY_HTTPS_PORT=${CADDY_HTTPS_PORT}
-CADDY_ACME_EMAIL=${CADDY_ACME_EMAIL}
+  if [[ "$DATABASE_MODE" == "bundled" ]]; then
+    postgres_bindings="POSTGRES_PORT=${POSTGRES_PORT}"
+    postgres_settings=$(cat <<EOF
 
 # Bundled postgres service settings.
 POSTGRES_USER=${POSTGRES_USER}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 POSTGRES_DB=${POSTGRES_DB}
 POSTGRES_HOST_AUTH_METHOD=scram-sha-256
+EOF
+)
+  fi
+
+  cat >"$ROOT_ENV_FILE" <<EOF
+# Generated by scripts/setup.sh
+# Docker Compose host port bindings.
+
+CRIKKET_PROXY_MODE=${PROXY_MODE}
+CRIKKET_DATABASE_MODE=${DATABASE_MODE}
+WEB_PORT=${WEB_PORT}
+SERVER_PORT=${SERVER_PORT}
+${postgres_bindings}
+CADDY_HTTP_PORT=${CADDY_HTTP_PORT}
+CADDY_HTTPS_PORT=${CADDY_HTTPS_PORT}
+CADDY_ACME_EMAIL=${CADDY_ACME_EMAIL}
+${postgres_settings}
 EOF
 }
 
@@ -636,35 +647,11 @@ EOF
 }
 
 write_caddyfile() {
-  local frontend_authority backend_authority frontend_domain backend_domain
+  local frontend_authority backend_authority
 
   mkdir -p "$DEPLOY_DIR"
   frontend_authority="$(url_authority "$NEXT_PUBLIC_APP_URL")"
   backend_authority="$(url_authority "$NEXT_PUBLIC_SERVER_URL")"
-  frontend_domain="$(url_host "$NEXT_PUBLIC_APP_URL")"
-  backend_domain="$(url_host "$NEXT_PUBLIC_SERVER_URL")"
-
-  if [[ "$frontend_domain" == "$backend_domain" ]]; then
-    cat >"$CADDYFILE_PATH" <<EOF
-{
-	email ${CADDY_ACME_EMAIL}
-}
-
-${frontend_authority} {
-	encode gzip zstd
-
-	@api path /api/* /rpc/* /api-reference*
-	handle @api {
-		reverse_proxy server:3000
-	}
-
-	handle {
-		reverse_proxy server:3001
-	}
-}
-EOF
-    return 0
-  fi
 
   cat >"$CADDYFILE_PATH" <<EOF
 {
@@ -729,6 +716,8 @@ Deploy mode:
   - Prebuilt GHCR images
 Proxy mode:
   - ${PROXY_MODE_LABEL}
+Database mode:
+  - $( [[ "$DATABASE_MODE" == "external" ]] && printf 'External PostgreSQL' || printf 'Bundled PostgreSQL' )
 
 Domains:
   - Frontend: ${FRONTEND_HOST}
@@ -745,8 +734,13 @@ Auto-filled URLs:
 Local bindings:
   - Web: ${WEB_PORT}
   - API: ${SERVER_PORT}
+EOF
+
+  if [[ "$DATABASE_MODE" == "bundled" ]]; then
+    cat <<EOF
   - Postgres: ${POSTGRES_PORT}
 EOF
+  fi
 
   if [[ "$PROXY_MODE" == "caddy" ]]; then
     cat <<EOF
@@ -761,7 +755,7 @@ Google OAuth callback:
   - ${BETTER_AUTH_URL}/api/auth/callback/google
 EOF
 
-  if [[ -z "$BETTER_AUTH_COOKIE_DOMAIN" && "$FRONTEND_HOST" != "$BACKEND_HOST" ]]; then
+  if [[ -z "$BETTER_AUTH_COOKIE_DOMAIN" ]]; then
     cat <<EOF
 
 Warning:
@@ -788,7 +782,11 @@ EOF
 }
 
 build_compose_file_args() {
-  COMPOSE_FILE_ARGS=("-f" "docker-compose.yml")
+  if [[ "$DATABASE_MODE" == "external" ]]; then
+    COMPOSE_FILE_ARGS=("-f" "docker-compose.external-db.yml")
+  else
+    COMPOSE_FILE_ARGS=("-f" "docker-compose.yml")
+  fi
 
   if [[ "$PROXY_MODE" == "caddy" ]]; then
     COMPOSE_FILE_ARGS+=("-f" "docker-compose.caddy.yml")
@@ -834,8 +832,8 @@ main() {
 
   configure_domains
   configure_proxy
-  configure_bindings
   configure_database
+  configure_bindings
   configure_auth
   configure_storage
   configure_optional_services

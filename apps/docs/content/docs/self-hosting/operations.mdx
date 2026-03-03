@@ -25,6 +25,14 @@ docker compose pull
 docker compose up -d
 ```
 
+External PostgreSQL equivalent:
+
+```bash
+git pull
+docker compose -f docker-compose.external-db.yml pull
+docker compose -f docker-compose.external-db.yml up -d
+```
+
 If you enabled built-in Caddy, add `-f docker-compose.caddy.yml` to the same commands.
 
 Post-update checks:
@@ -62,6 +70,10 @@ Track at minimum:
 ## Quick Commands
 
 ```bash
+# Start
+./scripts/start.sh
+./scripts/start.sh caddy
+
 # Update
 ./scripts/update.sh
 

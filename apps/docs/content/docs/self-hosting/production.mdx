@@ -86,6 +86,12 @@ Prebuilt images:
 docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
 ```
 
+Prebuilt images with an external PostgreSQL database:
+
+```bash
+docker compose -f docker-compose.external-db.yml -f docker-compose.caddy.yml up -d
+```
+
 Container routing note:
 
 - In the default compose file, `web` and `server` run as two containers.
@@ -109,27 +115,6 @@ api.example.com {
 }
 ```
 
-Example `deploy/Caddyfile` for a single domain:
-
-```bash
-{
-	email ops@example.com
-}
-
-example.com {
-	encode gzip zstd
-
-	@api path /api/* /rpc/* /api-reference*
-	handle @api {
-		reverse_proxy server:3000
-	}
-
-	handle {
-		reverse_proxy server:3001
-	}
-}
-```
-
 Matching env for separate app and API domains:
 
 ```bash
@@ -138,16 +123,6 @@ NEXT_PUBLIC_SERVER_URL=https://api.example.com
 BETTER_AUTH_URL=https://api.example.com
 CORS_ORIGINS=https://app.example.com
 BETTER_AUTH_COOKIE_DOMAIN=example.com
-```
-
-Matching env for a single public domain:
-
-```bash
-NEXT_PUBLIC_APP_URL=https://example.com
-NEXT_PUBLIC_SERVER_URL=https://example.com
-BETTER_AUTH_URL=https://example.com
-CORS_ORIGINS=https://example.com
-BETTER_AUTH_COOKIE_DOMAIN=
 ```
 
 ## Storage

@@ -54,7 +54,7 @@ cp apps/web/.env.example apps/web/.env
 
 ### Configure App Env
 
-Root `.env` is Docker-only (ports and bundled Postgres config).
+Root `.env` is Docker-only (ports, database mode, and bundled Postgres config).
 
 App settings belong in:
 
@@ -103,10 +103,22 @@ Prebuilt images:
 docker compose up -d
 ```
 
+If you use an external PostgreSQL provider:
+
+```bash
+docker compose -f docker-compose.external-db.yml up -d
+```
+
 Production with built-in Caddy:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
+```
+
+Production with built-in Caddy and external PostgreSQL:
+
+```bash
+docker compose -f docker-compose.external-db.yml -f docker-compose.caddy.yml up -d
 ```
 
   </Step>

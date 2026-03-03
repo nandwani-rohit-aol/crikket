@@ -69,6 +69,7 @@ default_value() {
 ensure_selfhost_layout() {
   [[ -f "${ROOT_DIR}/docker-compose.yml" ]] || die "Run this script from the Crikket repository."
   [[ -f "${ROOT_DIR}/docker-compose.caddy.yml" ]] || die "Missing docker-compose.caddy.yml."
+  [[ -f "${ROOT_DIR}/docker-compose.external-db.yml" ]] || die "Missing docker-compose.external-db.yml."
   [[ -f "$ROOT_ENV_FILE" ]] || die "Missing ${ROOT_ENV_FILE}. Run ./scripts/setup.sh first."
   [[ -f "$SERVER_ENV_FILE" ]] || die "Missing ${SERVER_ENV_FILE}. Run ./scripts/setup.sh first."
   [[ -f "$WEB_ENV_FILE" ]] || die "Missing ${WEB_ENV_FILE}. Run ./scripts/setup.sh first."
@@ -99,8 +100,13 @@ ensure_docker_access() {
 
 load_selfhost_mode() {
   PROXY_MODE="$(default_value "$ROOT_ENV_FILE" "CRIKKET_PROXY_MODE" "none")"
+  DATABASE_MODE="$(default_value "$ROOT_ENV_FILE" "CRIKKET_DATABASE_MODE" "bundled")"
 
-  COMPOSE_FILE_ARGS=("-f" "docker-compose.yml")
+  if [[ "$DATABASE_MODE" == "external" ]]; then
+    COMPOSE_FILE_ARGS=("-f" "docker-compose.external-db.yml")
+  else
+    COMPOSE_FILE_ARGS=("-f" "docker-compose.yml")
+  fi
 
   if [[ "$PROXY_MODE" == "caddy" ]]; then
     COMPOSE_FILE_ARGS+=("-f" "docker-compose.caddy.yml")
@@ -116,7 +122,5 @@ compose_run() {
 }
 
 is_bundled_postgres() {
-  local database_url
-  database_url="$(default_value "$SERVER_ENV_FILE" "DATABASE_URL" "")"
-  [[ "$database_url" == *"@postgres:5432/"* ]]
+  [[ "${DATABASE_MODE:-$(default_value "$ROOT_ENV_FILE" "CRIKKET_DATABASE_MODE" "bundled")}" == "bundled" ]]
 }

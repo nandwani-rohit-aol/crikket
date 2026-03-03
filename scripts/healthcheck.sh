@@ -40,9 +40,22 @@ load_health_env() {
   GOOGLE_CLIENT_SECRET="$(default_value "$SERVER_ENV_FILE" "GOOGLE_CLIENT_SECRET" "")"
 }
 
+database_mode_label() {
+  if is_bundled_postgres; then
+    printf 'bundled\n'
+    return 0
+  fi
+
+  printf 'external\n'
+}
+
 check_compose_services() {
   local expected_services service output
-  expected_services=(postgres server web)
+  expected_services=(server web)
+
+  if is_bundled_postgres; then
+    expected_services=(postgres "${expected_services[@]}")
+  fi
 
   if [[ "$PROXY_MODE" == "caddy" ]]; then
     expected_services+=(caddy)
@@ -167,6 +180,7 @@ main() {
   load_health_env
 
   printf 'Proxy mode: %s\n' "$PROXY_MODE"
+  printf 'Database mode: %s\n' "$(database_mode_label)"
   printf 'Compose files: %s\n' "$(compose_file_summary)"
 
   check_compose_services

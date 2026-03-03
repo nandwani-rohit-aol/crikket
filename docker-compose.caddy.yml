@@ -3,11 +3,6 @@ services:
     image: caddy:2.10-alpine
     container_name: crikket-caddy
     restart: unless-stopped
-    depends_on:
-      server:
-        condition: service_healthy
-      web:
-        condition: service_healthy
     ports:
       - "${CADDY_HTTP_PORT:-80}:80"
       - "${CADDY_HTTPS_PORT:-443}:443"

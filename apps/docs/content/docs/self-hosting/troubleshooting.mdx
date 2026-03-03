@@ -34,12 +34,15 @@ BETTER_AUTH_COOKIE_DOMAIN (if app/api are different subdomains)
 ### Database Connection Errors
 
 - Check `DATABASE_URL` credentials and host
-- Confirm `postgres` service is healthy
+- Confirm `postgres` service is healthy if you are using the bundled database
 - In Docker, `localhost` points to the container itself
   - Use `postgres` for bundled Compose Postgres
   - Use `host.docker.internal` for host-machine Postgres
 - If tables are missing in a fresh database:
-  - `docker compose run --rm migrate`
+  - bundled database:
+    - `docker compose run --rm migrate`
+  - external database:
+    - `docker compose -f docker-compose.external-db.yml run --rm migrate`
 
 ### Uploads Not Accessible
 
