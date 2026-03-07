@@ -6,8 +6,7 @@ This project only provide updates for latest releases. We recommend always using
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.x     | :white_check_mark: |
-| 0.x     | :x:                |
+| 0.x     | :white_check_mark: |
 
 ## Reporting a Vulnerability
 
