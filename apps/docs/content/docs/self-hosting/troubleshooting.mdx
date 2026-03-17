@@ -48,6 +48,7 @@ BETTER_AUTH_COOKIE_DOMAIN (optional; set it if you want root-domain cookies)
 
 - Verify `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY_ID`, and `STORAGE_SECRET_ACCESS_KEY`
 - Verify `STORAGE_REGION`/`STORAGE_ENDPOINT` for your provider
+- If you use a custom S3-compatible provider, try `STORAGE_ADDRESSING_STYLE=path` or `virtual` if the default `auto` mode does not match your provider
 - Verify bucket CORS if uploads fail before the server responds
 - If uploads are restricted to known sites, keep bucket CORS origins aligned with the capture public key `allowedOrigins`
 - If using `STORAGE_PUBLIC_URL`, confirm it points to accessible objects

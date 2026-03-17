@@ -19,6 +19,7 @@ STORAGE_ACCESS_KEY_ID
 STORAGE_SECRET_ACCESS_KEY
 STORAGE_REGION (required when STORAGE_ENDPOINT is unset)
 STORAGE_ENDPOINT (recommended for R2/custom S3 endpoints)
+STORAGE_ADDRESSING_STYLE (optional; `auto`, `path`, or `virtual`)
 STORAGE_PUBLIC_URL (optional)
 ```
 
@@ -136,6 +137,10 @@ BETTER_AUTH_COOKIE_DOMAIN=app.example.com
 - Configure `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY_ID`, and `STORAGE_SECRET_ACCESS_KEY`.
 - Use `STORAGE_REGION` for AWS S3.
 - Use `STORAGE_ENDPOINT` for Cloudflare R2/custom S3-compatible storage.
+- Leave `STORAGE_ADDRESSING_STYLE` unset to keep the default `auto` behavior.
+- In `auto`, custom non-AWS endpoints use path-style URLs, which fits similar providers.
+- For AWS S3, prefer `STORAGE_REGION` without `STORAGE_ENDPOINT` unless you intentionally need a specific AWS endpoint hostname.
+- Set `STORAGE_ADDRESSING_STYLE=path` or `virtual` only if your provider needs an explicit override.
 - Set `STORAGE_PUBLIC_URL` if you want stable public URLs instead of signed URLs.
 
 Full setup guide:

@@ -32,37 +32,34 @@ export interface StorageProvider {
 }
 
 interface S3StorageOptions {
-  provider: CloudStorageProvider
   bucket: string
   region: string
   endpoint?: string
+  addressingStyle?: S3AddressingStyle
   accessKeyId: string
   secretAccessKey: string
   publicUrl?: string
 }
-
-const CLOUD_STORAGE_PROVIDER_CONFIG = {
-  r2: { usePathStyle: true },
-  s3: { usePathStyle: false },
-} as const
 
 const STORAGE_CLEANUP_BASE_DELAY_MS = 60_000
 const STORAGE_CLEANUP_MAX_DELAY_MS = 24 * 60 * 60 * 1000
 const STORAGE_CLEANUP_DEFAULT_BATCH = 50
 const STORAGE_CLEANUP_MAX_ERROR_LENGTH = 2000
 const PRESIGNED_GET_URL_TTL_SECONDS = 604_800
+const AWS_S3_HOSTNAME_REGEX = /(^|[.-])s3([.-]|$)/
 
-type CloudStorageProvider = keyof typeof CLOUD_STORAGE_PROVIDER_CONFIG
+export type S3AddressingStyle = "auto" | "path" | "virtual"
 
 export function createS3StorageProvider(
   options: S3StorageOptions
 ): StorageProvider {
-  const usePathStyle =
-    CLOUD_STORAGE_PROVIDER_CONFIG[options.provider].usePathStyle
   const client = new S3Client({
     region: options.region,
     endpoint: options.endpoint,
-    forcePathStyle: usePathStyle,
+    forcePathStyle: resolveS3ForcePathStyle({
+      endpoint: options.endpoint,
+      addressingStyle: options.addressingStyle,
+    }),
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
     credentials: {
@@ -401,20 +398,62 @@ function getCloudStorageConfig(): S3StorageOptions {
   }
 
   return {
-    provider: resolveCloudProvider(env.STORAGE_ENDPOINT),
     bucket,
     region,
     endpoint: env.STORAGE_ENDPOINT,
+    addressingStyle: env.STORAGE_ADDRESSING_STYLE,
     accessKeyId,
     secretAccessKey,
     publicUrl: env.STORAGE_PUBLIC_URL,
   }
 }
-function resolveCloudProvider(
+
+export function resolveS3ForcePathStyle(input: {
   endpoint: string | undefined
-): CloudStorageProvider {
-  if (endpoint?.includes(".r2.cloudflarestorage.com")) return "r2"
-  return "s3"
+  addressingStyle?: S3AddressingStyle
+}): boolean {
+  if (input.addressingStyle === "path") {
+    return true
+  }
+
+  if (input.addressingStyle === "virtual") {
+    return false
+  }
+
+  if (!input.endpoint) {
+    return false
+  }
+
+  const hostname = getEndpointHostname(input.endpoint)
+  if (!hostname) {
+    return false
+  }
+
+  if (isCloudflareR2Hostname(hostname)) {
+    return true
+  }
+
+  return !isAwsS3Hostname(hostname)
+}
+
+function getEndpointHostname(endpoint: string): string | null {
+  try {
+    return new URL(endpoint).hostname.toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function isCloudflareR2Hostname(hostname: string): boolean {
+  return hostname.endsWith(".r2.cloudflarestorage.com")
+}
+
+function isAwsS3Hostname(hostname: string): boolean {
+  if (!hostname.endsWith(".amazonaws.com")) {
+    return false
+  }
+
+  return AWS_S3_HOSTNAME_REGEX.test(hostname)
 }
 
 function trimTrailingSlash(value: string): string {

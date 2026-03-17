@@ -27,6 +27,7 @@ STORAGE_ACCESS_KEY_ID
 STORAGE_SECRET_ACCESS_KEY
 STORAGE_REGION
 STORAGE_ENDPOINT
+STORAGE_ADDRESSING_STYLE
 STORAGE_PUBLIC_URL
 ```
 
@@ -36,6 +37,7 @@ Rules:
 - `STORAGE_ACCESS_KEY_ID` and `STORAGE_SECRET_ACCESS_KEY` are always required.
 - `STORAGE_REGION` is required for standard AWS S3.
 - `STORAGE_ENDPOINT` is recommended for R2 and custom S3-compatible providers.
+- `STORAGE_ADDRESSING_STYLE` is optional and overrides how bucket URLs are generated.
 - `STORAGE_PUBLIC_URL` is optional.
 
 Use one of these patterns:
@@ -59,6 +61,40 @@ STORAGE_REGION=auto
 STORAGE_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 ```
 
+### Other S3-Compatible Storage
+
+```bash
+STORAGE_BUCKET=crikket-production
+STORAGE_ACCESS_KEY_ID=your-access-key-id
+STORAGE_SECRET_ACCESS_KEY=your-secret-access-key
+STORAGE_REGION=us-east-1
+STORAGE_ENDPOINT=https://minio.example.com
+```
+
+Crikket will generate path-style presigned upload URLs for custom non-AWS endpoints, for example:
+
+```text
+https://minio.example.com/crikket-production/organizations/...
+```
+
+For AWS S3, prefer `STORAGE_REGION` without `STORAGE_ENDPOINT` unless you intentionally need a specific AWS endpoint hostname.
+
+### Optional Addressing Override
+
+If your provider needs a specific bucket URL style, set:
+
+```bash
+STORAGE_ADDRESSING_STYLE=auto
+```
+
+Allowed values:
+
+- `auto`: default behavior. AWS S3 endpoints use virtual-hosted-style URLs; R2 and other custom endpoints use path-style URLs.
+- `path`: always use `https://endpoint/bucket/key`.
+- `virtual`: always use `https://bucket.endpoint/key`.
+
+Use `path` for providers that require bucket names in the URL path. Use `virtual` for providers that require bucket subdomains even on a custom endpoint.
+
 ### Optional Public URL
 
 If you serve files from a CDN or public bucket hostname and want stable public URLs instead of signed URLs:
@@ -76,6 +112,13 @@ Crikket uses this flow for bug report artifacts:
 3. Crikket API finalizes the report only after storage uploads succeed.
 
 Because the browser talks directly to storage, CORS is mandatory.
+
+Presigned URL addressing follows the storage endpoint:
+
+- By default, AWS S3 uses virtual-hosted-style URLs.
+- By default, Cloudflare R2 keeps the existing R2-compatible path-style behavior.
+- By default, custom non-AWS S3-compatible endpoints use path-style URLs, which is the expected setup.
+- `STORAGE_ADDRESSING_STYLE` can override this for any provider when needed.
 
 ## CORS Requirements
 
