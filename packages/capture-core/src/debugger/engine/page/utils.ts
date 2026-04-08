@@ -2,6 +2,13 @@ import { MAX_TEXT_LENGTH } from "./constants"
 import type { Reporter } from "./types"
 
 const REDACTED_VALUE = "[REDACTED]"
+const ALLOWED_SENSITIVE_HEADERS = new Set([
+  "authorization",
+  "api-key",
+  "apikey",
+  "x-api-key",
+])
+
 const SENSITIVE_NAME_PATTERNS = [
   "authorization",
   "cookie",
@@ -51,7 +58,16 @@ export const isSensitiveName = (value: string): boolean => {
 }
 
 export const shouldHideHeader = (headerName: string): boolean => {
-  return headerName.includes("debugger") || isSensitiveName(headerName)
+  const normalizedHeaderName = headerName.trim().toLowerCase()
+  if (!normalizedHeaderName) {
+    return false
+  }
+
+  return (
+    normalizedHeaderName.includes("debugger") ||
+    (isSensitiveName(normalizedHeaderName) &&
+      !ALLOWED_SENSITIVE_HEADERS.has(normalizedHeaderName))
+  )
 }
 
 export const getElementTarget = (
