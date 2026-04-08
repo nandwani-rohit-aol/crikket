@@ -4,13 +4,15 @@ export type CaptureType = "video" | "screenshot"
 
 interface UseRecorderInitProps {
   onCaptureTypeChange: (type: CaptureType) => void
+  onIncludeMicrophoneChange: (value: boolean) => void
   onScreenshotLoaded: (blob: Blob) => void
-  onStartRecording: () => void
+  onStartRecording: (options?: { includeMicrophone?: boolean }) => void
   onError: (error: string) => void
 }
 
 export function useRecorderInit({
   onCaptureTypeChange,
+  onIncludeMicrophoneChange,
   onScreenshotLoaded,
   onStartRecording,
   onError,
@@ -20,7 +22,11 @@ export function useRecorderInit({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const type = (params.get("captureType") as CaptureType) || "video"
+    const includeMicrophone =
+      params.get("includeMicrophone") === "1" ||
+      params.get("includeMicrophone") === "true"
     onCaptureTypeChange(type)
+    onIncludeMicrophoneChange(includeMicrophone)
 
     if (type === "screenshot") {
       chrome.storage.local.get(["pendingScreenshot"], (result) => {
@@ -44,9 +50,17 @@ export function useRecorderInit({
       chrome.storage.local.get(["startRecordingImmediately"], (result) => {
         if (result.startRecordingImmediately) {
           chrome.storage.local.remove(["startRecordingImmediately"])
-          onStartRecording()
+          onStartRecording({
+            includeMicrophone,
+          })
         }
       })
     }
-  }, [onCaptureTypeChange, onScreenshotLoaded, onStartRecording, onError])
+  }, [
+    onCaptureTypeChange,
+    onIncludeMicrophoneChange,
+    onScreenshotLoaded,
+    onStartRecording,
+    onError,
+  ])
 }

@@ -25,8 +25,10 @@ const ACTIVE_TAB_ERROR_MESSAGE =
 interface UsePopupCaptureReturn {
   isCapturing: boolean
   captureError: string | null
+  includeMicrophone: boolean
   pendingCaptureType: PopupCaptureType | null
   recordingCountdown: number | null
+  setIncludeMicrophone: (value: boolean) => void
   requestCapture: (captureType: PopupCaptureType) => void
   clearPendingCapture: () => void
   startCapture: (captureType: PopupCaptureType) => Promise<void>
@@ -43,6 +45,7 @@ export function usePopupCapture(): UsePopupCaptureReturn {
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(
     null
   )
+  const [includeMicrophone, setIncludeMicrophone] = useState(false)
   const [pendingCaptureType, setPendingCaptureType] =
     useState<PopupCaptureType | null>(null)
 
@@ -81,6 +84,7 @@ export function usePopupCapture(): UsePopupCaptureReturn {
           activeTab,
           captureContext,
           debuggerSessionId,
+          includeMicrophone,
           setRecordingCountdown,
         })
       }
@@ -103,8 +107,10 @@ export function usePopupCapture(): UsePopupCaptureReturn {
   return {
     isCapturing,
     captureError,
+    includeMicrophone,
     pendingCaptureType,
     recordingCountdown,
+    setIncludeMicrophone,
     requestCapture,
     clearPendingCapture,
     startCapture,
@@ -177,6 +183,7 @@ async function startVideoCapture(input: {
   activeTab: ActiveCaptureTab
   captureContext: CaptureContext
   debuggerSessionId: string
+  includeMicrophone: boolean
   setRecordingCountdown: (value: number | null) => void
 }): Promise<void> {
   const countdownEndsAt = Date.now() + RECORDING_COUNTDOWN_SECONDS * 1000
@@ -196,13 +203,19 @@ async function startVideoCapture(input: {
     startRecordingImmediately: true,
   })
 
+  const recorderEntryUrl = new URL(chrome.runtime.getURL("/recorder.html"))
+  recorderEntryUrl.searchParams.set("captureType", "video")
+  if (input.includeMicrophone) {
+    recorderEntryUrl.searchParams.set("includeMicrophone", "1")
+  }
+
   const recorderUrl = appendDebuggerSessionIdToUrl(
-    chrome.runtime.getURL("/recorder.html?captureType=video"),
+    recorderEntryUrl.toString(),
     input.debuggerSessionId
   )
 
   const recorderTab = await chrome.tabs.create({
-    active: false,
+    active: input.includeMicrophone,
     url: recorderUrl,
   })
 

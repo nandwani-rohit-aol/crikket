@@ -1,10 +1,12 @@
 import { Button } from "@crikket/ui/components/ui/button"
+import { Checkbox } from "@crikket/ui/components/ui/checkbox"
 import { Camera, Video } from "lucide-react"
 import { ShortcutKbd } from "@/components/shortcut-kbd"
 import type { PopupCaptureType } from "@/hooks/use-popup-capture"
 import { formatDuration } from "@/lib/utils"
 
 interface PopupCaptureActionsProps {
+  includeMicrophone: boolean
   isBusy: boolean
   isRecordingInProgress: boolean
   recordingCountdown: number | null
@@ -17,9 +19,11 @@ interface PopupCaptureActionsProps {
   onStopFromPopup: () => Promise<void>
   onStartCapture: (captureType: PopupCaptureType) => Promise<void>
   onClearPendingCapture: () => void
+  onIncludeMicrophoneChange: (value: boolean) => void
 }
 
 export function PopupCaptureActions({
+  includeMicrophone,
   isBusy,
   isRecordingInProgress,
   recordingCountdown,
@@ -32,6 +36,7 @@ export function PopupCaptureActions({
   onStopFromPopup,
   onStartCapture,
   onClearPendingCapture,
+  onIncludeMicrophoneChange,
 }: PopupCaptureActionsProps) {
   if (recordingCountdown) {
     return (
@@ -109,6 +114,26 @@ export function PopupCaptureActions({
             Allow Crikket to capture your current tab for{" "}
             {pendingCaptureType === "video" ? "recording" : "screenshot"}?
           </p>
+          {pendingCaptureType === "video" ? (
+            <label className="flex items-start gap-3 rounded-md border border-border/60 bg-background/70 p-3">
+              <Checkbox
+                checked={includeMicrophone}
+                disabled={isBusy}
+                onCheckedChange={(checked) =>
+                  onIncludeMicrophoneChange(checked === true)
+                }
+              />
+              <span className="space-y-1">
+                <span className="block font-medium text-sm">
+                  Include microphone
+                </span>
+                <span className="block text-muted-foreground text-xs">
+                  Record your microphone audio along with the captured tab
+                  video.
+                </span>
+              </span>
+            </label>
+          ) : null}
           <div className="flex gap-2">
             <Button
               className="flex-1"

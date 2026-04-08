@@ -56,6 +56,7 @@ function App() {
   const shortcuts = useCommandShortcuts()
   const [state, setState] = useState<State>("idle")
   const [captureType, setCaptureType] = useState<CaptureType>("video")
+  const [includeMicrophone, setIncludeMicrophone] = useState(false)
   const [startTime, setStartTime] = useState<number | null>(null)
   const [recordedDurationMs, setRecordedDurationMs] = useState<number | null>(
     null
@@ -173,41 +174,56 @@ function App() {
     state,
   })
 
-  const startVideoCapture = useCallback(async () => {
-    const success = await startCapture()
-    if (success) {
-      const startedAt = Date.now()
-      const sessionId = debuggerSessionId
-      if (sessionId) {
-        await markDebuggerRecordingStarted({
-          sessionId,
-          recordingStartedAt: startedAt,
-        }).catch((error: unknown) => {
-          reportNonFatalError(
-            `Failed to mark debugger recording start for session ${sessionId}`,
-            error
-          )
-        })
+  const startVideoCapture = useCallback(
+    async (options?: { includeMicrophone?: boolean }) => {
+      const shouldIncludeMicrophone =
+        options?.includeMicrophone ?? includeMicrophone
+
+      if (shouldIncludeMicrophone !== includeMicrophone) {
+        setIncludeMicrophone(shouldIncludeMicrophone)
       }
 
-      setStartTime(startedAt)
-      setRecordedDurationMs(null)
-      setState("recording")
-    }
-  }, [debuggerSessionId, startCapture])
+      const success = await startCapture({
+        includeMicrophone: shouldIncludeMicrophone,
+      })
+      if (success) {
+        const startedAt = Date.now()
+        const sessionId = debuggerSessionId
+        if (sessionId) {
+          await markDebuggerRecordingStarted({
+            sessionId,
+            recordingStartedAt: startedAt,
+          }).catch((error: unknown) => {
+            reportNonFatalError(
+              `Failed to mark debugger recording start for session ${sessionId}`,
+              error
+            )
+          })
+        }
 
-  const handleStartCapture = useCallback(async () => {
-    if (captureType === "screenshot") {
-      const blob = await captureScreenshot()
-      if (blob) {
+        setStartTime(startedAt)
         setRecordedDurationMs(null)
-        setState("stopped")
+        setState("recording")
       }
-      return
-    }
+    },
+    [debuggerSessionId, includeMicrophone, startCapture]
+  )
 
-    await startVideoCapture()
-  }, [captureScreenshot, captureType, startVideoCapture])
+  const handleStartCapture = useCallback(
+    async (options?: { includeMicrophone?: boolean }) => {
+      if (captureType === "screenshot") {
+        const blob = await captureScreenshot()
+        if (blob) {
+          setRecordedDurationMs(null)
+          setState("stopped")
+        }
+        return
+      }
+
+      await startVideoCapture(options)
+    },
+    [captureScreenshot, captureType, startVideoCapture]
+  )
 
   useEffect(() => {
     if (state === "recording" && recordedBlob) {
@@ -257,6 +273,7 @@ function App() {
 
   useRecorderInit({
     onCaptureTypeChange: setCaptureType,
+    onIncludeMicrophoneChange: setIncludeMicrophone,
     onScreenshotLoaded: (blob) => {
       setScreenshotBlob(blob)
       setRecordedDurationMs(null)

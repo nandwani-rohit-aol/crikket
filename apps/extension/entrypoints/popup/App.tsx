@@ -16,10 +16,12 @@ function App() {
   const {
     captureError,
     clearPendingCapture,
+    includeMicrophone,
     isCapturing,
     pendingCaptureType,
     recordingCountdown: localRecordingCountdown,
     requestCapture,
+    setIncludeMicrophone,
     startCapture,
   } = usePopupCapture()
   const {
@@ -69,9 +71,11 @@ function App() {
         ) : null}
 
         <PopupCaptureActions
+          includeMicrophone={includeMicrophone}
           isBusy={isBusy}
           isRecordingInProgress={isRecordingInProgress}
           onClearPendingCapture={clearPendingCapture}
+          onIncludeMicrophoneChange={setIncludeMicrophone}
           onRequestCapture={requestCapture}
           onStartCapture={startCapture}
           onStopFromPopup={stopFromPopup}
