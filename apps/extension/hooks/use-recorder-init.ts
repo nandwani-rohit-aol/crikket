@@ -1,20 +1,27 @@
 import { useEffect, useRef } from "react"
+import type { CaptureTarget } from "@/lib/capture-context"
 
 export type CaptureType = "video" | "screenshot"
 
 interface UseRecorderInitProps {
   onCaptureTypeChange: (type: CaptureType) => void
+  onCaptureTargetChange: (target: CaptureTarget) => void
   onIncludeMicrophoneChange: (value: boolean) => void
   onScreenshotLoaded: (blob: Blob) => void
-  onStartRecording: (options?: { includeMicrophone?: boolean }) => void
+  onStartCapture: (options?: {
+    captureType?: CaptureType
+    captureTarget?: CaptureTarget
+    includeMicrophone?: boolean
+  }) => void
   onError: (error: string) => void
 }
 
 export function useRecorderInit({
   onCaptureTypeChange,
+  onCaptureTargetChange,
   onIncludeMicrophoneChange,
   onScreenshotLoaded,
-  onStartRecording,
+  onStartCapture,
   onError,
 }: UseRecorderInitProps) {
   const autoStartChecked = useRef(false)
@@ -22,10 +29,13 @@ export function useRecorderInit({
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const type = (params.get("captureType") as CaptureType) || "video"
+    const captureTarget =
+      params.get("captureTarget") === "screen" ? "screen" : "tab"
     const includeMicrophone =
       params.get("includeMicrophone") === "1" ||
       params.get("includeMicrophone") === "true"
     onCaptureTypeChange(type)
+    onCaptureTargetChange(captureTarget)
     onIncludeMicrophoneChange(includeMicrophone)
 
     if (type === "screenshot") {
@@ -43,24 +53,27 @@ export function useRecorderInit({
             })
         }
       })
-    } else if (type === "video") {
-      if (autoStartChecked.current) return
-      autoStartChecked.current = true
-
-      chrome.storage.local.get(["startRecordingImmediately"], (result) => {
-        if (result.startRecordingImmediately) {
-          chrome.storage.local.remove(["startRecordingImmediately"])
-          onStartRecording({
-            includeMicrophone,
-          })
-        }
-      })
     }
+
+    if (autoStartChecked.current) return
+    autoStartChecked.current = true
+
+    chrome.storage.local.get(["startRecordingImmediately"], (result) => {
+      if (result.startRecordingImmediately) {
+        chrome.storage.local.remove(["startRecordingImmediately"])
+        onStartCapture({
+          captureType: type,
+          captureTarget,
+          includeMicrophone,
+        })
+      }
+    })
   }, [
     onCaptureTypeChange,
+    onCaptureTargetChange,
     onIncludeMicrophoneChange,
     onScreenshotLoaded,
-    onStartRecording,
+    onStartCapture,
     onError,
   ])
 }

@@ -5,7 +5,7 @@ interface TabCaptureConstraints extends MediaTrackConstraints {
   }
 }
 
-interface TabCaptureStreamOptions {
+interface CaptureStreamOptions {
   includeMicrophone?: boolean
 }
 
@@ -26,6 +26,37 @@ const stopStreamTracks = (stream: MediaStream | null | undefined): void => {
 
   for (const track of stream.getTracks()) {
     track.stop()
+  }
+}
+
+const createMediaStreamHandle = (
+  sourceStream: MediaStream,
+  microphoneTrack?: {
+    cleanup: () => Promise<void>
+    track: MediaStreamTrack
+  }
+): TabCaptureStreamHandle => {
+  if (!microphoneTrack) {
+    return {
+      stream: sourceStream,
+      cleanup: () => {
+        stopStreamTracks(sourceStream)
+      },
+    }
+  }
+
+  const stream = new MediaStream([
+    ...sourceStream.getVideoTracks(),
+    microphoneTrack.track,
+  ])
+
+  return {
+    stream,
+    cleanup: async () => {
+      stopStreamTracks(stream)
+      stopStreamTracks(sourceStream)
+      await microphoneTrack.cleanup()
+    },
   }
 }
 
@@ -161,7 +192,7 @@ const createMicrophoneRecordingTrack = async (
 
 export const requestTabCaptureStream = async (
   tabId: number,
-  options: TabCaptureStreamOptions = {}
+  options: CaptureStreamOptions = {}
 ): Promise<TabCaptureStreamHandle> => {
   let tabStream: MediaStream | null = null
   let microphoneCleanup: (() => Promise<void>) | null = null
@@ -189,34 +220,46 @@ export const requestTabCaptureStream = async (
     })
 
     if (!options.includeMicrophone) {
-      return {
-        stream: tabStream,
-        cleanup: () => {
-          stopStreamTracks(tabStream)
-        },
-      }
+      return createMediaStreamHandle(tabStream)
     }
 
     const microphone = await createMicrophoneRecordingTrack(tabStream)
     microphoneCleanup = microphone.cleanup
 
-    const stream = new MediaStream([
-      ...tabStream.getVideoTracks(),
-      microphone.track,
-    ])
-
-    return {
-      stream,
-      cleanup: async () => {
-        stopStreamTracks(stream)
-        stopStreamTracks(tabStream)
-        if (microphoneCleanup) {
-          await microphoneCleanup()
-        }
-      },
-    }
+    return createMediaStreamHandle(tabStream, microphone)
   } catch (error) {
     stopStreamTracks(tabStream)
+    if (microphoneCleanup) {
+      await microphoneCleanup().catch(() => undefined)
+    }
+    throw error
+  }
+}
+
+export const requestDisplayCaptureStream = async (
+  options: CaptureStreamOptions = {}
+): Promise<TabCaptureStreamHandle> => {
+  let displayStream: MediaStream | null = null
+  let microphoneCleanup: (() => Promise<void>) | null = null
+
+  try {
+    displayStream = await navigator.mediaDevices.getDisplayMedia({
+      audio: false,
+      video: {
+        displaySurface: "monitor",
+      },
+    })
+
+    if (!options.includeMicrophone) {
+      return createMediaStreamHandle(displayStream)
+    }
+
+    const microphone = await createMicrophoneRecordingTrack(displayStream)
+    microphoneCleanup = microphone.cleanup
+
+    return createMediaStreamHandle(displayStream, microphone)
+  } catch (error) {
+    stopStreamTracks(displayStream)
     if (microphoneCleanup) {
       await microphoneCleanup().catch(() => undefined)
     }

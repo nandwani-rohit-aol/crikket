@@ -1,14 +1,17 @@
 import { Button } from "@crikket/ui/components/ui/button"
 import { ShortcutKbd } from "@/components/shortcut-kbd"
+import type { CaptureTarget } from "@/lib/capture-context"
 import { formatDuration } from "../lib/utils"
 
 interface RecordingStepProps {
+  captureTarget: CaptureTarget
   duration: number
   onStopRecording: () => void
   stopRecordingShortcut: string | null
 }
 
 export function RecordingStep({
+  captureTarget: _captureTarget,
   duration,
   onStopRecording,
   stopRecordingShortcut,

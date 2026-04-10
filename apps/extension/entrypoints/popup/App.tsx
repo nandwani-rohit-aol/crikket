@@ -14,6 +14,7 @@ import {
 function App() {
   const shortcuts = useCommandShortcuts()
   const {
+    captureTarget,
     captureError,
     clearPendingCapture,
     includeMicrophone,
@@ -21,6 +22,7 @@ function App() {
     pendingCaptureType,
     recordingCountdown: localRecordingCountdown,
     requestCapture,
+    setCaptureTarget,
     setIncludeMicrophone,
     startCapture,
   } = usePopupCapture()
@@ -71,9 +73,11 @@ function App() {
         ) : null}
 
         <PopupCaptureActions
+          captureTarget={captureTarget}
           includeMicrophone={includeMicrophone}
           isBusy={isBusy}
           isRecordingInProgress={isRecordingInProgress}
+          onCaptureTargetChange={setCaptureTarget}
           onClearPendingCapture={clearPendingCapture}
           onIncludeMicrophoneChange={setIncludeMicrophone}
           onRequestCapture={requestCapture}
@@ -86,14 +90,6 @@ function App() {
           startScreenshotShortcut={shortcuts.startScreenshot}
           stopRecordingShortcut={shortcuts.stopRecording}
         />
-
-        <div className="rounded-md border bg-muted p-3">
-          <p className="text-muted-foreground text-xs leading-relaxed">
-            We only capture your current browser tab. A new tab will open for
-            you to review and submit your report.
-          </p>
-        </div>
-
         <Button
           className="justify-start text-muted-foreground"
           onClick={async () => {

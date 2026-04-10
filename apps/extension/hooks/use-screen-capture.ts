@@ -1,7 +1,11 @@
 import { reportNonFatalError } from "@crikket/shared/lib/errors"
 import { useCallback, useRef, useState } from "react"
+import type { CaptureTarget } from "@/lib/capture-context"
 import { readAndClearCaptureTabId } from "@/lib/capture-context"
-import { requestTabCaptureStream } from "@/lib/display-media"
+import {
+  requestDisplayCaptureStream,
+  requestTabCaptureStream,
+} from "@/lib/display-media"
 
 export interface UseScreenCaptureReturn {
   isRecording: boolean
@@ -9,6 +13,7 @@ export interface UseScreenCaptureReturn {
   screenshotBlob: Blob | null
   error: string | null
   startRecording: (options?: {
+    captureTarget?: CaptureTarget
     includeMicrophone?: boolean
   }) => Promise<boolean>
   stopRecording: () => Promise<Blob | null>
@@ -69,22 +74,26 @@ export function useScreenCapture(): UseScreenCaptureReturn {
   }, [])
 
   const startRecording = useCallback(
-    async (options?: { includeMicrophone?: boolean }): Promise<boolean> => {
+    async (options?: {
+      captureTarget?: CaptureTarget
+      includeMicrophone?: boolean
+    }): Promise<boolean> => {
       try {
         setError(null)
         setRecordedBlob(null)
 
-        const captureTabId = await readAndClearCaptureTabId()
-        if (!captureTabId) {
+        const captureTarget = options?.captureTarget ?? "tab"
+        const sourceTabId = await readAndClearCaptureTabId()
+        if (captureTarget === "tab" && !sourceTabId) {
           throw new Error(
             "Could not lock the source tab. Please start recording from the extension popup."
           )
         }
 
-        const captureHandle = await requestTabCaptureStream(
-          captureTabId,
-          options
-        )
+        const captureHandle =
+          captureTarget === "screen"
+            ? await requestDisplayCaptureStream(options)
+            : await requestTabCaptureStream(sourceTabId as number, options)
         const { stream, cleanup } = captureHandle
 
         streamRef.current = stream
@@ -130,13 +139,16 @@ export function useScreenCapture(): UseScreenCaptureReturn {
         mediaRecorder.start(1000)
         setIsRecording(true)
 
-        if (options?.includeMicrophone) {
+        if (
+          typeof sourceTabId === "number" &&
+          (options?.includeMicrophone || captureTarget === "screen")
+        ) {
           window.setTimeout(() => {
             chrome.tabs
-              .update(captureTabId, { active: true })
+              .update(sourceTabId, { active: true })
               .catch((error: unknown) => {
                 reportNonFatalError(
-                  `Failed to refocus captured tab ${captureTabId} after microphone recording start`,
+                  `Failed to refocus captured tab ${sourceTabId} after recording start`,
                   error
                 )
               })
@@ -180,60 +192,60 @@ export function useScreenCapture(): UseScreenCaptureReturn {
   }, [cleanupActiveStream])
 
   const takeScreenshot = useCallback(async (): Promise<Blob | null> => {
-    try {
-      setError(null)
-      setScreenshotBlob(null)
+      try {
+        setError(null)
+        setScreenshotBlob(null)
 
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          displaySurface: "browser",
-        },
-        audio: false,
-      })
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            displaySurface: "browser",
+          },
+          audio: false,
+        })
 
-      const videoTrack = stream.getVideoTracks()[0]
-      const settings = videoTrack.getSettings()
+        const videoTrack = stream.getVideoTracks()[0]
+        const settings = videoTrack.getSettings()
 
-      const video = document.createElement("video")
-      video.srcObject = stream
-      video.autoplay = true
+        const video = document.createElement("video")
+        video.srcObject = stream
+        video.autoplay = true
 
-      await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => {
-          video.play()
-          resolve()
+        await new Promise<void>((resolve) => {
+          video.onloadedmetadata = () => {
+            video.play()
+            resolve()
+          }
+        })
+
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        const canvas = document.createElement("canvas")
+        canvas.width = settings.width || video.videoWidth
+        canvas.height = settings.height || video.videoHeight
+
+        const ctx = canvas.getContext("2d")
+        if (!ctx) {
+          throw new Error("Could not get canvas context")
         }
-      })
 
-      await new Promise((resolve) => setTimeout(resolve, 100))
+        ctx.drawImage(video, 0, 0)
 
-      const canvas = document.createElement("canvas")
-      canvas.width = settings.width || video.videoWidth
-      canvas.height = settings.height || video.videoHeight
-
-      const ctx = canvas.getContext("2d")
-      if (!ctx) {
-        throw new Error("Could not get canvas context")
+        for (const track of stream.getTracks()) {
+          track.stop()
+        }
+        return new Promise((resolve) => {
+          canvas.toBlob((blob) => {
+            setScreenshotBlob(blob)
+            resolve(blob)
+          }, "image/png")
+        })
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to take screenshot"
+        setError(message)
+        return null
       }
-
-      ctx.drawImage(video, 0, 0)
-
-      for (const track of stream.getTracks()) {
-        track.stop()
-      }
-      return new Promise((resolve) => {
-        canvas.toBlob((blob) => {
-          setScreenshotBlob(blob)
-          resolve(blob)
-        }, "image/png")
-      })
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to take screenshot"
-      setError(message)
-      return null
-    }
-  }, [])
+    }, [])
 
   const reset = useCallback(() => {
     setRecordedBlob(null)

@@ -17,6 +17,7 @@ import { useForm } from "@tanstack/react-form"
 import { AlertTriangle } from "lucide-react"
 import { type SyntheticEvent, useCallback, useEffect, useRef } from "react"
 import * as z from "zod"
+import type { CaptureTarget } from "@/lib/capture-context"
 
 const priorityValues = Object.values(PRIORITY_OPTIONS) as [
   Priority,
@@ -39,6 +40,7 @@ interface DebuggerSummary {
 
 interface FormStepProps {
   captureType: "video" | "screenshot"
+  captureTarget: CaptureTarget
   previewUrl: string | null
   videoDurationMs: number | null
   initialTitle: string
@@ -62,6 +64,7 @@ interface FormValues {
 
 export function FormStep({
   captureType,
+  captureTarget,
   previewUrl,
   videoDurationMs,
   initialTitle,

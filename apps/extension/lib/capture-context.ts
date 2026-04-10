@@ -1,4 +1,5 @@
 export type CaptureContext = { title?: string; url?: string }
+export type CaptureTarget = "tab" | "screen"
 
 export const CAPTURE_CONTEXT_STORAGE_KEY = "captureContext"
 export const CAPTURE_TAB_ID_STORAGE_KEY = "captureTabId"

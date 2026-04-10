@@ -8,6 +8,7 @@ import {
 import {
   CAPTURE_CONTEXT_STORAGE_KEY,
   CAPTURE_TAB_ID_STORAGE_KEY,
+  type CaptureTarget,
   type CaptureContext,
   getActiveTabContext,
   RECORDER_TAB_ID_STORAGE_KEY,
@@ -23,11 +24,13 @@ const ACTIVE_TAB_ERROR_MESSAGE =
   "Could not find an active browser tab to capture."
 
 interface UsePopupCaptureReturn {
+  captureTarget: CaptureTarget
   isCapturing: boolean
   captureError: string | null
   includeMicrophone: boolean
   pendingCaptureType: PopupCaptureType | null
   recordingCountdown: number | null
+  setCaptureTarget: (value: CaptureTarget) => void
   setIncludeMicrophone: (value: boolean) => void
   requestCapture: (captureType: PopupCaptureType) => void
   clearPendingCapture: () => void
@@ -40,6 +43,7 @@ interface ActiveCaptureTab {
 }
 
 export function usePopupCapture(): UsePopupCaptureReturn {
+  const [captureTarget, setCaptureTarget] = useState<CaptureTarget>("tab")
   const [isCapturing, setIsCapturing] = useState(false)
   const [captureError, setCaptureError] = useState<string | null>(null)
   const [recordingCountdown, setRecordingCountdown] = useState<number | null>(
@@ -51,6 +55,9 @@ export function usePopupCapture(): UsePopupCaptureReturn {
 
   const requestCapture = (captureType: PopupCaptureType) => {
     setCaptureError(null)
+    if (captureType === "screenshot") {
+      setCaptureTarget("tab")
+    }
     setPendingCaptureType(captureType)
   }
 
@@ -83,6 +90,7 @@ export function usePopupCapture(): UsePopupCaptureReturn {
         await startVideoCapture({
           activeTab,
           captureContext,
+          captureTarget,
           debuggerSessionId,
           includeMicrophone,
           setRecordingCountdown,
@@ -105,11 +113,13 @@ export function usePopupCapture(): UsePopupCaptureReturn {
   }
 
   return {
+    captureTarget,
     isCapturing,
     captureError,
     includeMicrophone,
     pendingCaptureType,
     recordingCountdown,
+    setCaptureTarget,
     setIncludeMicrophone,
     requestCapture,
     clearPendingCapture,
@@ -167,6 +177,7 @@ async function startScreenshotCapture(input: {
   await chrome.storage.local.set({
     [CAPTURE_CONTEXT_STORAGE_KEY]: input.captureContext,
     pendingScreenshot: base64data,
+    startRecordingImmediately: false,
   })
 
   const recorderUrl = appendDebuggerSessionIdToUrl(
@@ -182,10 +193,23 @@ async function startScreenshotCapture(input: {
 async function startVideoCapture(input: {
   activeTab: ActiveCaptureTab
   captureContext: CaptureContext
+  captureTarget: CaptureTarget
   debuggerSessionId: string
   includeMicrophone: boolean
   setRecordingCountdown: (value: number | null) => void
 }): Promise<void> {
+  if (input.captureTarget === "screen") {
+    await startRecorderCapture({
+      activeTab: input.activeTab,
+      captureContext: input.captureContext,
+      captureTarget: input.captureTarget,
+      captureType: "video",
+      debuggerSessionId: input.debuggerSessionId,
+      includeMicrophone: input.includeMicrophone,
+    })
+    return
+  }
+
   const countdownEndsAt = Date.now() + RECORDING_COUNTDOWN_SECONDS * 1000
 
   await chrome.storage.local.set({
@@ -197,6 +221,7 @@ async function startVideoCapture(input: {
 
   await chrome.storage.local.remove([RECORDING_COUNTDOWN_ENDS_AT_STORAGE_KEY])
 
+  await chrome.storage.local.remove(["pendingScreenshot"])
   await chrome.storage.local.set({
     [CAPTURE_CONTEXT_STORAGE_KEY]: input.captureContext,
     [CAPTURE_TAB_ID_STORAGE_KEY]: input.activeTab.id,
@@ -216,6 +241,45 @@ async function startVideoCapture(input: {
 
   const recorderTab = await chrome.tabs.create({
     active: input.includeMicrophone,
+    url: recorderUrl,
+  })
+
+  if (typeof recorderTab.id === "number") {
+    await chrome.storage.local.set({
+      [RECORDER_TAB_ID_STORAGE_KEY]: recorderTab.id,
+    })
+  }
+}
+
+async function startRecorderCapture(input: {
+  activeTab: ActiveCaptureTab
+  captureContext: CaptureContext
+  captureTarget: CaptureTarget
+  captureType: PopupCaptureType
+  debuggerSessionId: string
+  includeMicrophone: boolean
+}): Promise<void> {
+  await chrome.storage.local.remove(["pendingScreenshot"])
+  await chrome.storage.local.set({
+    [CAPTURE_CONTEXT_STORAGE_KEY]: input.captureContext,
+    [CAPTURE_TAB_ID_STORAGE_KEY]: input.activeTab.id,
+    startRecordingImmediately: true,
+  })
+
+  const recorderEntryUrl = new URL(chrome.runtime.getURL("/recorder.html"))
+  recorderEntryUrl.searchParams.set("captureType", input.captureType)
+  recorderEntryUrl.searchParams.set("captureTarget", input.captureTarget)
+  if (input.captureType === "video" && input.includeMicrophone) {
+    recorderEntryUrl.searchParams.set("includeMicrophone", "1")
+  }
+
+  const recorderUrl = appendDebuggerSessionIdToUrl(
+    recorderEntryUrl.toString(),
+    input.debuggerSessionId
+  )
+
+  const recorderTab = await chrome.tabs.create({
+    active: true,
     url: recorderUrl,
   })
 

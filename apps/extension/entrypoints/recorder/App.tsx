@@ -41,6 +41,7 @@ import {
   isUnauthorizedSubmissionError,
   normalizeOptionalText,
 } from "@/lib/recorder-submit"
+import type { CaptureTarget } from "@/lib/capture-context"
 import { formatDuration, getDeviceInfo } from "@/lib/utils"
 
 type State = "idle" | "recording" | "stopped" | "submitting" | "success"
@@ -56,6 +57,7 @@ function App() {
   const shortcuts = useCommandShortcuts()
   const [state, setState] = useState<State>("idle")
   const [captureType, setCaptureType] = useState<CaptureType>("video")
+  const [captureTarget, setCaptureTarget] = useState<CaptureTarget>("tab")
   const [includeMicrophone, setIncludeMicrophone] = useState(false)
   const [startTime, setStartTime] = useState<number | null>(null)
   const [recordedDurationMs, setRecordedDurationMs] = useState<number | null>(
@@ -175,15 +177,23 @@ function App() {
   })
 
   const startVideoCapture = useCallback(
-    async (options?: { includeMicrophone?: boolean }) => {
+    async (options?: {
+      captureTarget?: CaptureTarget
+      includeMicrophone?: boolean
+    }) => {
       const shouldIncludeMicrophone =
         options?.includeMicrophone ?? includeMicrophone
+      const shouldUseCaptureTarget = options?.captureTarget ?? captureTarget
 
       if (shouldIncludeMicrophone !== includeMicrophone) {
         setIncludeMicrophone(shouldIncludeMicrophone)
       }
+      if (shouldUseCaptureTarget !== captureTarget) {
+        setCaptureTarget(shouldUseCaptureTarget)
+      }
 
       const success = await startCapture({
+        captureTarget: shouldUseCaptureTarget,
         includeMicrophone: shouldIncludeMicrophone,
       })
       if (success) {
@@ -206,12 +216,25 @@ function App() {
         setState("recording")
       }
     },
-    [debuggerSessionId, includeMicrophone, startCapture]
+    [captureTarget, debuggerSessionId, includeMicrophone, startCapture]
   )
 
   const handleStartCapture = useCallback(
-    async (options?: { includeMicrophone?: boolean }) => {
-      if (captureType === "screenshot") {
+    async (options?: {
+      captureType?: CaptureType
+      captureTarget?: CaptureTarget
+      includeMicrophone?: boolean
+    }) => {
+      const resolvedCaptureType = options?.captureType ?? captureType
+      const resolvedCaptureTarget = options?.captureTarget ?? captureTarget
+      if (resolvedCaptureType !== captureType) {
+        setCaptureType(resolvedCaptureType)
+      }
+      if (resolvedCaptureTarget !== captureTarget) {
+        setCaptureTarget(resolvedCaptureTarget)
+      }
+
+      if (resolvedCaptureType === "screenshot") {
         const blob = await captureScreenshot()
         if (blob) {
           setRecordedDurationMs(null)
@@ -222,7 +245,7 @@ function App() {
 
       await startVideoCapture(options)
     },
-    [captureScreenshot, captureType, startVideoCapture]
+    [captureScreenshot, captureTarget, captureType, startVideoCapture]
   )
 
   useEffect(() => {
@@ -273,13 +296,14 @@ function App() {
 
   useRecorderInit({
     onCaptureTypeChange: setCaptureType,
+    onCaptureTargetChange: setCaptureTarget,
     onIncludeMicrophoneChange: setIncludeMicrophone,
     onScreenshotLoaded: (blob) => {
       setScreenshotBlob(blob)
       setRecordedDurationMs(null)
       setState("stopped")
     },
-    onStartRecording: handleStartCapture,
+    onStartCapture: handleStartCapture,
     onError: (err) => setSubmitError(err),
   })
 
@@ -423,6 +447,7 @@ function App() {
 
           {state === "recording" ? (
             <RecordingStep
+              captureTarget={captureTarget}
               duration={duration}
               onStopRecording={handleStopRecording}
               stopRecordingShortcut={shortcuts.stopRecording}
@@ -432,6 +457,7 @@ function App() {
           {state === "stopped" || state === "submitting" ? (
             <FormStep
               captureType={captureType}
+              captureTarget={captureTarget}
               debuggerSummary={debuggerSummary}
               initialTitle={suggestedTitle}
               isSubmitting={state === "submitting"}
