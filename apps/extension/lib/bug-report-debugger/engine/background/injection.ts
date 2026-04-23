@@ -1,4 +1,5 @@
 import { reportNonFatalError } from "@crikket/shared/lib/errors"
+import { isDebuggerInstrumentationBlockedUrl } from "../../blocked-hosts"
 
 const DEBUGGER_CONTENT_BRIDGE_FILE = "debugger-content-bridge.js"
 const DEBUGGER_PAGE_RUNTIME_FILE = "debugger-page.js"
@@ -23,6 +24,14 @@ export async function injectDebuggerScriptIntoTab(
   }
 
   try {
+    const tab = await chrome.tabs.get(tabId)
+    if (
+      typeof tab.url === "string" &&
+      isDebuggerInstrumentationBlockedUrl(tab.url)
+    ) {
+      return
+    }
+
     await chrome.scripting.executeScript({
       target: {
         tabId,
@@ -46,5 +55,8 @@ export async function injectDebuggerScriptIntoTab(
 }
 
 export function isInjectablePageUrl(url: string): boolean {
-  return url.startsWith("http://") || url.startsWith("https://")
+  return (
+    (url.startsWith("http://") || url.startsWith("https://")) &&
+    !isDebuggerInstrumentationBlockedUrl(url)
+  )
 }
