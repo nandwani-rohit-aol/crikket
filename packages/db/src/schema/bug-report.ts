@@ -110,6 +110,8 @@ export const bugReportLog = pgTable(
     message: text("message").notNull(),
     timestamp: timestamp("timestamp").notNull(),
     offset: integer("offset"), // ms from start of recording
+    sourceTabId: integer("source_tab_id"),
+    source: jsonb("source"),
     metadata: jsonb("metadata"),
   },
   (table) => [index("bug_report_log_bugReportId_idx").on(table.bugReportId)]
@@ -132,6 +134,8 @@ export const bugReportNetworkRequest = pgTable(
     responseBody: text("response_body"),
     timestamp: timestamp("timestamp").notNull(),
     offset: integer("offset"), // ms from start of recording
+    sourceTabId: integer("source_tab_id"),
+    source: jsonb("source"),
   },
   (table) => [
     index("bug_report_network_request_bugReportId_idx").on(table.bugReportId),
@@ -149,6 +153,8 @@ export const bugReportAction = pgTable(
     target: text("target"), // selector or element description
     timestamp: timestamp("timestamp").notNull(),
     offset: integer("offset"), // ms from start of recording
+    sourceTabId: integer("source_tab_id"),
+    source: jsonb("source"),
     metadata: jsonb("metadata"), // coordinates, key pressed, etc.
   },
   (table) => [index("bug_report_action_bugReportId_idx").on(table.bugReportId)]

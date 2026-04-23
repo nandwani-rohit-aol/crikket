@@ -1,4 +1,8 @@
-import type { BugReportDebuggerPayload, DebuggerSessionSnapshot } from "./types"
+import type {
+  BugReportDebuggerPayload,
+  DebuggerEventSource,
+  DebuggerSessionSnapshot,
+} from "./types"
 
 export function hasDebuggerPayloadData(
   payload: BugReportDebuggerPayload
@@ -15,6 +19,9 @@ export function buildDebuggerSubmissionPayload(
 ): BugReportDebuggerPayload {
   const anchorTimestamp = snapshot.recordingStartedAt ?? snapshot.startedAt
   const events = [...snapshot.events].sort((a, b) => a.timestamp - b.timestamp)
+  const sourceIdsByKey = new Map<string, number>()
+  const sourcesById: Record<string, DebuggerEventSource> = {}
+  let nextSourceId = 1
 
   const payload: BugReportDebuggerPayload = {
     actions: [],
@@ -25,6 +32,7 @@ export function buildDebuggerSubmissionPayload(
   for (const event of events) {
     const timestamp = new Date(event.timestamp).toISOString()
     const offset = toOffset(event.timestamp, anchorTimestamp)
+    const sourceId = registerSource(event.source)
 
     if (event.kind === "action") {
       payload.actions.push({
@@ -33,6 +41,7 @@ export function buildDebuggerSubmissionPayload(
         timestamp,
         offset,
         metadata: event.metadata,
+        sourceId,
       })
       continue
     }
@@ -44,6 +53,7 @@ export function buildDebuggerSubmissionPayload(
         timestamp,
         offset,
         metadata: event.metadata,
+        sourceId,
       })
       continue
     }
@@ -59,7 +69,45 @@ export function buildDebuggerSubmissionPayload(
       responseBody: event.responseBody,
       timestamp,
       offset,
+      sourceId,
     })
+  }
+
+  if (Object.keys(sourcesById).length > 0) {
+    payload.sources = sourcesById
+  }
+
+  function registerSource(
+    source: DebuggerEventSource | undefined
+  ): number | undefined {
+    if (!source) {
+      return undefined
+    }
+
+    const normalizedSource = {
+      tabId: source.tabId,
+      ...(typeof source.windowId === "number"
+        ? { windowId: source.windowId }
+        : undefined),
+      ...(source.title ? { title: source.title } : undefined),
+      ...(source.url ? { url: source.url } : undefined),
+    } satisfies DebuggerEventSource
+
+    const key = JSON.stringify([
+      normalizedSource.tabId,
+      normalizedSource.windowId ?? null,
+      normalizedSource.title ?? null,
+      normalizedSource.url ?? null,
+    ])
+    const existingSourceId = sourceIdsByKey.get(key)
+    if (existingSourceId !== undefined) {
+      return existingSourceId
+    }
+
+    const sourceId = nextSourceId++
+    sourceIdsByKey.set(key, sourceId)
+    sourcesById[String(sourceId)] = normalizedSource
+    return sourceId
   }
 
   return payload

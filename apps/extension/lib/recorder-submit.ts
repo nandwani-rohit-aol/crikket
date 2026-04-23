@@ -59,6 +59,49 @@ export function getDebuggerCaptureSummary(
   }
 }
 
+export function getDebuggerCapturedTabCount(
+  payload: BugReportDebuggerPayload
+): number {
+  const tabIds = new Set<number>()
+
+  if (payload.sources) {
+    for (const source of Object.values(payload.sources)) {
+      if (typeof source.tabId === "number") {
+        tabIds.add(source.tabId)
+      }
+    }
+  } else {
+    for (const action of payload.actions) {
+      const tabId = action.source?.tabId
+      if (typeof tabId === "number") {
+        tabIds.add(tabId)
+      }
+    }
+
+    for (const log of payload.logs) {
+      const tabId = log.source?.tabId
+      if (typeof tabId === "number") {
+        tabIds.add(tabId)
+      }
+    }
+
+    for (const request of payload.networkRequests) {
+      const tabId = request.source?.tabId
+      if (typeof tabId === "number") {
+        tabIds.add(tabId)
+      }
+    }
+  }
+
+  if (tabIds.size > 0) {
+    return tabIds.size
+  }
+
+  return payload.actions.length + payload.logs.length + payload.networkRequests.length > 0
+    ? 1
+    : 0
+}
+
 export function dedupeMessages(messages: string[]): string[] {
   return [...new Set(messages.map((entry) => entry.trim()).filter(Boolean))]
 }

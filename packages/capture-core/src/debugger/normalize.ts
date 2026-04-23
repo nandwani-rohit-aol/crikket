@@ -3,7 +3,12 @@ import {
   MAX_TEXT_LENGTH,
   MAX_URL_LENGTH,
 } from "./constants"
-import type { DebuggerEvent, StoredDebuggerSession } from "./types"
+import type {
+  DebuggerCaptureScope,
+  DebuggerEvent,
+  DebuggerEventSource,
+  StoredDebuggerSession,
+} from "./types"
 
 export interface StoredReplayBuffer {
   tabId: number
@@ -18,12 +23,18 @@ export function normalizeStoredSession(
 
   const sessionId = asOptionalString(value.sessionId)
   const captureTabId = asOptionalNumber(value.captureTabId)
+  const captureScope = normalizeCaptureScope(value.captureScope)
   const captureType = value.captureType
+  const captureWindowId =
+    value.captureWindowId === null
+      ? null
+      : asOptionalNumber(value.captureWindowId)
   const startedAt = asOptionalNumber(value.startedAt)
   const recordingStartedAt =
     value.recordingStartedAt === null
       ? null
       : asOptionalNumber(value.recordingStartedAt)
+  const trackedTabIds = normalizeTrackedTabIds(value.trackedTabIds)
 
   if (!sessionId || captureTabId === undefined || startedAt === undefined) {
     return null
@@ -40,9 +51,13 @@ export function normalizeStoredSession(
   return {
     sessionId,
     captureTabId,
+    captureScope,
     captureType,
+    captureWindowId: captureWindowId ?? null,
     startedAt,
     recordingStartedAt: recordingStartedAt ?? null,
+    trackedTabIds:
+      trackedTabIds.length > 0 ? trackedTabIds : [captureTabId],
     events,
   }
 }
@@ -68,6 +83,7 @@ export function normalizeDebuggerEvent(value: unknown): DebuggerEvent | null {
       actionType,
       target: asOptionalString(value.target, MAX_TEXT_LENGTH),
       metadata: sanitizeRecord(value.metadata),
+      source: normalizeEventSource(value.source),
     }
   }
 
@@ -92,6 +108,7 @@ export function normalizeDebuggerEvent(value: unknown): DebuggerEvent | null {
       level,
       message,
       metadata: sanitizeRecord(value.metadata),
+      source: normalizeEventSource(value.source),
     }
   }
 
@@ -110,6 +127,49 @@ export function normalizeDebuggerEvent(value: unknown): DebuggerEvent | null {
     responseHeaders: sanitizeHeaders(value.responseHeaders),
     requestBody: asOptionalString(value.requestBody, MAX_NETWORK_BODY_LENGTH),
     responseBody: asOptionalString(value.responseBody, MAX_NETWORK_BODY_LENGTH),
+    source: normalizeEventSource(value.source),
+  }
+}
+
+function normalizeCaptureScope(value: unknown): DebuggerCaptureScope {
+  return value === "window" ? "window" : "tab"
+}
+
+function normalizeTrackedTabIds(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const ids = new Set<number>()
+
+  for (const candidate of value) {
+    const tabId = asOptionalNumber(candidate)
+    if (tabId === undefined || tabId < 0) {
+      continue
+    }
+
+    ids.add(tabId)
+  }
+
+  return [...ids]
+}
+
+function normalizeEventSource(value: unknown): DebuggerEventSource | undefined {
+  if (!isRecord(value)) return undefined
+
+  const tabId = asOptionalNumber(value.tabId)
+  if (tabId === undefined || tabId < 0) {
+    return undefined
+  }
+
+  const windowId = asOptionalNumber(value.windowId)
+
+  return {
+    tabId,
+    windowId:
+      windowId !== undefined && windowId >= 0 ? windowId : undefined,
+    title: asOptionalString(value.title, MAX_TEXT_LENGTH),
+    url: asOptionalString(value.url, MAX_URL_LENGTH),
   }
 }
 

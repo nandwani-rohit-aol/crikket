@@ -77,7 +77,9 @@ export function usePopupCapture(): UsePopupCaptureReturn {
 
       debuggerSessionId = await initializeDebuggerSession(
         captureType,
-        activeTab.id
+        activeTab.id,
+        activeTab.windowId,
+        captureTarget
       )
 
       if (captureType === "screenshot") {
@@ -147,11 +149,16 @@ async function getActiveCaptureTab(): Promise<ActiveCaptureTab> {
 
 async function initializeDebuggerSession(
   captureType: PopupCaptureType,
-  captureTabId: number
+  captureTabId: number,
+  captureWindowId: number | null,
+  captureTarget: CaptureTarget
 ): Promise<string> {
   const session = await startDebuggerSession({
     captureTabId,
+    captureScope:
+      captureType === "video" && captureTarget === "screen" ? "window" : "tab",
     captureType,
+    captureWindowId: captureWindowId ?? undefined,
     instantReplayLookbackMs: captureType === "screenshot" ? 10_000 : undefined,
   })
 

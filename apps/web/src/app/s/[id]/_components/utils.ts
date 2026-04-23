@@ -3,6 +3,7 @@ import type {
   DebuggerAction,
   DebuggerLog,
   DebuggerNetworkRequest,
+  DebuggerSourceSummary,
   DebuggerTimelineEntry,
 } from "./types"
 
@@ -21,6 +22,8 @@ export function buildActionEntry(
     kind: "action",
     label: action.type,
     detail: detailBits.join(" • "),
+    sourceLabel: getSourceLabel(action.source),
+    sourceTabId: action.source?.tabId ?? null,
     timestamp: action.timestamp,
     offset: action.offset,
   }
@@ -32,6 +35,8 @@ export function buildLogEntry(log: DebuggerLog): DebuggerTimelineEntry {
     kind: "log",
     label: log.level.toUpperCase(),
     detail: log.message,
+    sourceLabel: getSourceLabel(log.source),
+    sourceTabId: log.source?.tabId ?? null,
     timestamp: log.timestamp,
     offset: log.offset,
   }
@@ -58,9 +63,55 @@ export function buildNetworkEntry(
     kind: "network",
     label: request.method.toUpperCase(),
     detail,
+    sourceLabel: getSourceLabel(request.source),
+    sourceTabId: request.source?.tabId ?? null,
     timestamp: request.timestamp,
     offset: request.offset,
   }
+}
+
+export function getSourceLabel(
+  source:
+    | {
+        tabId: number
+        title?: string | null
+        url?: string | null
+      }
+    | null
+    | undefined
+): string | undefined {
+  if (!source) {
+    return undefined
+  }
+
+  const title =
+    typeof source.title === "string" && source.title.trim().length > 0
+      ? source.title.trim()
+      : null
+  const parsedUrl =
+    typeof source.url === "string" && source.url.length > 0
+      ? safeParseUrl(source.url)
+      : null
+  const host = parsedUrl?.host ?? null
+
+  if (title && host) {
+    return `${title} (${host})`
+  }
+
+  if (title) {
+    return title
+  }
+
+  if (host) {
+    return host
+  }
+
+  return `Tab ${source.tabId}`
+}
+
+export function getSourceFilterLabel(source: DebuggerSourceSummary): string {
+  const label = getSourceLabel(source)
+  return label ?? `Tab ${source.tabId}`
 }
 
 export function applyVideoOffsetFallback(

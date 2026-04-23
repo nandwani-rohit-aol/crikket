@@ -9,10 +9,12 @@ import { TimelineList } from "./timeline-list"
 import type {
   DebuggerAction,
   DebuggerNetworkRequest,
+  DebuggerSourceSummary,
   DebuggerTimelineEntry,
   DeviceInfo,
   SharedBugReport,
 } from "./types"
+import { getSourceFilterLabel } from "./utils"
 
 export type SidebarTab = "details" | "console" | "network" | "actions"
 
@@ -44,6 +46,11 @@ interface BugReportSidebarProps {
     actions: ActionsSidebarState
     console: TimelineSidebarState
   }
+  sourceFilter: {
+    activeSourceTabId: number | null
+    sources: DebuggerSourceSummary[]
+    onSourceChange: (tabId: number | null) => void
+  }
   network: NetworkSidebarState
   onEntrySelect: (entry: DebuggerTimelineEntry) => void
 }
@@ -55,6 +62,7 @@ export function BugReportSidebar({
   tabAction,
   onTabChange,
   timeline,
+  sourceFilter,
   network,
   onEntrySelect,
 }: BugReportSidebarProps) {
@@ -94,6 +102,35 @@ export function BugReportSidebar({
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto">
+        {activeTab !== "details" && sourceFilter.sources.length > 0 ? (
+          <div className="border-b bg-background p-3">
+            <p className="mb-2 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+              Captured Tabs
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <SourceFilterButton
+                active={sourceFilter.activeSourceTabId === null}
+                count={sourceFilter.sources.length}
+                label="All tabs"
+                onClick={() => sourceFilter.onSourceChange(null)}
+              />
+              {sourceFilter.sources.map((source) => (
+                <SourceFilterButton
+                  active={sourceFilter.activeSourceTabId === source.tabId}
+                  count={
+                    source.actionCount +
+                    source.logCount +
+                    source.networkRequestCount
+                  }
+                  key={source.tabId}
+                  label={getSourceFilterLabel(source)}
+                  onClick={() => sourceFilter.onSourceChange(source.tabId)}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         {activeTab === "details" && (
           <div className="space-y-6 p-4">
             <div className="space-y-4">
@@ -197,6 +234,36 @@ function TabButton({
     >
       {icon}
       {label}
+    </button>
+  )
+}
+
+function SourceFilterButton({
+  active,
+  count,
+  label,
+  onClick,
+}: {
+  active: boolean
+  count: number
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      className={cn(
+        "inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] transition-colors",
+        active
+          ? "border-primary/40 bg-primary/10 text-foreground"
+          : "border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="truncate">{label}</span>
+      <span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+        {count}
+      </span>
     </button>
   )
 }

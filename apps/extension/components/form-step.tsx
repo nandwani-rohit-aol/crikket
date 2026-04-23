@@ -41,6 +41,7 @@ interface DebuggerSummary {
 interface FormStepProps {
   captureType: "video" | "screenshot"
   captureTarget: CaptureTarget
+  capturedTabCount: number
   previewUrl: string | null
   videoDurationMs: number | null
   initialTitle: string
@@ -65,6 +66,7 @@ interface FormValues {
 export function FormStep({
   captureType,
   captureTarget,
+  capturedTabCount,
   previewUrl,
   videoDurationMs,
   initialTitle,
@@ -198,6 +200,12 @@ export function FormStep({
               <span>Logs: {debuggerSummary.logs}</span>
               <span aria-hidden="true">•</span>
               <span>Requests: {debuggerSummary.networkRequests}</span>
+              {capturedTabCount > 1 ? (
+                <>
+                  <span aria-hidden="true">•</span>
+                  <span>Tabs: {capturedTabCount}</span>
+                </>
+              ) : null}
             </div>
           </section>
 

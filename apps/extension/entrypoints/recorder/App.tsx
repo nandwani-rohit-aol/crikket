@@ -36,6 +36,7 @@ import {
   type DebuggerCaptureSummary,
   dedupeMessages,
   EMPTY_DEBUGGER_SUMMARY,
+  getDebuggerCapturedTabCount,
   getDebuggerCaptureSummary,
   getSubmissionErrorMessage,
   isUnauthorizedSubmissionError,
@@ -47,6 +48,7 @@ import { formatDuration, getDeviceInfo } from "@/lib/utils"
 type State = "idle" | "recording" | "stopped" | "submitting" | "success"
 
 interface DebuggerSubmissionInput {
+  capturedTabCount: number
   sessionId: string | null
   payload: BugReportDebuggerPayload | undefined
   summary: DebuggerCaptureSummary
@@ -69,6 +71,7 @@ function App() {
   const [preSubmitWarnings, setPreSubmitWarnings] = useState<string[]>([])
   const [debuggerSummary, setDebuggerSummary] =
     useState<DebuggerCaptureSummary>(EMPTY_DEBUGGER_SUMMARY)
+  const [capturedTabCount, setCapturedTabCount] = useState(0)
   const debuggerSessionId = useMemo(
     () => readDebuggerSessionIdFromSearch(window.location.search),
     []
@@ -110,6 +113,7 @@ function App() {
         "Debugger session was not found. This report may be missing captured logs."
       )
       return {
+        capturedTabCount: 0,
         sessionId: null,
         payload: undefined,
         summary: EMPTY_DEBUGGER_SUMMARY,
@@ -132,6 +136,7 @@ function App() {
         "Debugger snapshot could not be loaded. This report may be missing captured logs."
       )
       return {
+        capturedTabCount: 0,
         sessionId,
         payload: undefined,
         summary: EMPTY_DEBUGGER_SUMMARY,
@@ -140,6 +145,7 @@ function App() {
     }
 
     const payload = buildDebuggerSubmissionPayload(snapshot)
+    const capturedTabCount = getDebuggerCapturedTabCount(payload)
     const summary = getDebuggerCaptureSummary(payload)
     const hasPayloadData = hasDebuggerPayloadData(payload)
 
@@ -154,6 +160,7 @@ function App() {
     }
 
     return {
+      capturedTabCount,
       sessionId,
       payload: hasPayloadData ? payload : undefined,
       summary,
@@ -272,6 +279,7 @@ function App() {
         }
 
         setDebuggerSummary(debuggerInput.summary)
+        setCapturedTabCount(debuggerInput.capturedTabCount)
         setPreSubmitWarnings(debuggerInput.warnings)
       })
       .catch((error: unknown) => {
@@ -284,6 +292,7 @@ function App() {
         }
 
         setDebuggerSummary(EMPTY_DEBUGGER_SUMMARY)
+        setCapturedTabCount(0)
         setPreSubmitWarnings([
           "Could not validate debugger data before submitting.",
         ])
@@ -315,6 +324,7 @@ function App() {
     setSubmissionWarnings([])
     setPreSubmitWarnings([])
     setDebuggerSummary(EMPTY_DEBUGGER_SUMMARY)
+    setCapturedTabCount(0)
     setRecordedDurationMs(null)
     setStartTime(null)
     clearDebuggerState().catch((error: unknown) => {
@@ -458,6 +468,7 @@ function App() {
             <FormStep
               captureType={captureType}
               captureTarget={captureTarget}
+              capturedTabCount={capturedTabCount}
               debuggerSummary={debuggerSummary}
               initialTitle={suggestedTitle}
               isSubmitting={state === "submitting"}

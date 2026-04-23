@@ -87,6 +87,11 @@ export function TimelineList({
                 </span>
               )}
             </div>
+            {entry.sourceLabel ? (
+              <p className="truncate text-[10px] text-muted-foreground">
+                {entry.sourceLabel}
+              </p>
+            ) : null}
             <p className="line-clamp-2 break-all font-mono text-muted-foreground text-xs">
               {entry.detail}
             </p>

@@ -35,6 +35,7 @@ export const debuggerNetworkRequestsInputSchema = z.object({
   id: z.string().min(1),
   page: z.number().int().positive().optional(),
   perPage: z.number().int().positive().optional(),
+  sourceTabId: z.number().int().nonnegative().optional(),
   search: z
     .string()
     .max(200)

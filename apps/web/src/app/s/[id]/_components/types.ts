@@ -6,8 +6,12 @@ export type SharedBugReport = Awaited<
 export type SharedBugReportDebuggerEvents = Awaited<
   ReturnType<OrpcClient["bugReport"]["getDebuggerEvents"]>
 >
+export type SharedBugReportDebuggerSources = Awaited<
+  ReturnType<OrpcClient["bugReport"]["getDebuggerSources"]>
+>
 export type DebuggerAction = SharedBugReportDebuggerEvents["actions"][number]
 export type DebuggerLog = SharedBugReportDebuggerEvents["logs"][number]
+export type DebuggerSourceSummary = SharedBugReportDebuggerSources[number]
 
 export type SharedNetworkRequestsPage = Awaited<
   ReturnType<OrpcClient["bugReport"]["getNetworkRequests"]>
@@ -21,6 +25,8 @@ export interface DebuggerTimelineEntry {
   kind: DebuggerTimelineKind
   label: string
   detail: string
+  sourceLabel?: string
+  sourceTabId?: number | null
   timestamp: string
   offset: number | null
 }

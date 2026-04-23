@@ -46,21 +46,34 @@ export type DebuggerEvent =
   | DebuggerConsoleEvent
   | DebuggerNetworkEvent
 
+export interface BugReportDebuggerSource {
+  tabId: number
+  windowId?: number
+  title?: string
+  url?: string
+}
+
+export interface BugReportDebuggerPayloadSourceReference {
+  sourceId?: number
+  source?: BugReportDebuggerSource
+}
+
 export interface BugReportDebuggerPayload {
+  sources?: Record<string, BugReportDebuggerSource>
   actions: Array<{
     type: string
     target?: string
     timestamp: string
     offset: number | null
     metadata?: Record<string, unknown>
-  }>
+  } & BugReportDebuggerPayloadSourceReference>
   logs: Array<{
     level: "log" | "info" | "warn" | "error" | "debug"
     message: string
     timestamp: string
     offset: number | null
     metadata?: Record<string, unknown>
-  }>
+  } & BugReportDebuggerPayloadSourceReference>
   networkRequests: Array<{
     method: string
     url: string
@@ -72,7 +85,7 @@ export interface BugReportDebuggerPayload {
     responseBody?: string
     timestamp: string
     offset: number | null
-  }>
+  } & BugReportDebuggerPayloadSourceReference>
 }
 
 export interface CaptureInitOptions {

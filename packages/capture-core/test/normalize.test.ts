@@ -41,6 +41,7 @@ describe("debugger normalization regression", () => {
       },
       requestBody: "x".repeat(4000),
       responseBody: "y".repeat(4000),
+      source: undefined,
     })
   })
 
@@ -48,15 +49,24 @@ describe("debugger normalization regression", () => {
     const session = normalizeStoredSession({
       sessionId: " session_1 ",
       captureTabId: 42.9,
+      captureScope: "window",
       captureType: "video",
+      captureWindowId: 9.2,
       startedAt: 1000.6,
       recordingStartedAt: 1500.4,
+      trackedTabIds: [42.9, 87.4, -1, "bad"],
       events: [
         {
           kind: "action",
           timestamp: 1100.8,
           actionType: "click",
           target: "button.submit",
+          source: {
+            tabId: 87.9,
+            windowId: 9.1,
+            title: " Checkout ",
+            url: " https://example.com/checkout ",
+          },
           metadata: {
             nested: {
               ok: true,
@@ -88,15 +98,24 @@ describe("debugger normalization regression", () => {
     expect(session).toEqual({
       sessionId: "session_1",
       captureTabId: 42,
+      captureScope: "window",
       captureType: "video",
+      captureWindowId: 9,
       startedAt: 1000,
       recordingStartedAt: 1500,
+      trackedTabIds: [42, 87],
       events: [
         {
           kind: "action",
           timestamp: 1100,
           actionType: "click",
           target: "button.submit",
+          source: {
+            tabId: 87,
+            windowId: 9,
+            title: "Checkout",
+            url: "https://example.com/checkout",
+          },
           metadata: {
             nested: {
               ok: true,
@@ -114,6 +133,7 @@ describe("debugger normalization regression", () => {
           level: "warn",
           message: "warn message",
           metadata: undefined,
+          source: undefined,
         },
       ],
     })
@@ -147,6 +167,7 @@ describe("debugger normalization regression", () => {
           level: "info",
           message: "buffered",
           metadata: undefined,
+          source: undefined,
         },
       ],
     })

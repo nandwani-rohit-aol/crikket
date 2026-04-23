@@ -23,7 +23,11 @@ import { client, orpc } from "@/utils/orpc"
 import { BugReportCanvas } from "./bug-report-canvas"
 import { BugReportHeader } from "./bug-report-header"
 import { BugReportSidebar, type SidebarTab } from "./bug-report-sidebar"
-import type { DebuggerTimelineEntry, SharedBugReport } from "./types"
+import type {
+  DebuggerSourceSummary,
+  DebuggerTimelineEntry,
+  SharedBugReport,
+} from "./types"
 import {
   applyVideoOffsetFallback,
   buildActionEntry,
@@ -393,11 +397,21 @@ export function BugReportView({ id }: BugReportViewProps) {
     hasOpenedDebuggerTimelineTab || shouldOpenDebuggerTimelineTabByDefault
   const shouldLoadNetworkRequests =
     hasOpenedNetworkTab || shouldOpenNetworkTabByDefault
+  const [selectedSourceTabId, setSelectedSourceTabId] = useState<number | null>(
+    null
+  )
 
   const debuggerEventsQuery = useQuery(
     orpc.bugReport.getDebuggerEvents.queryOptions({
       input: { id },
       enabled: Boolean(id) && shouldLoadDebuggerEvents,
+    })
+  )
+  const debuggerSourcesQuery = useQuery(
+    orpc.bugReport.getDebuggerSources.queryOptions({
+      input: { id },
+      enabled: Boolean(id),
+      staleTime: Number.POSITIVE_INFINITY,
     })
   )
 
@@ -409,8 +423,14 @@ export function BugReportView({ id }: BugReportViewProps) {
         page: pageParam,
         perPage: NETWORK_REQUESTS_PAGE_SIZE,
         search: networkSearch ?? undefined,
+        sourceTabId: selectedSourceTabId ?? undefined,
       }),
-      queryKey: ["networkRequests", id, networkSearch ?? ""],
+      queryKey: [
+        "networkRequests",
+        id,
+        networkSearch ?? "",
+        selectedSourceTabId ?? "all",
+      ],
       getNextPageParam: (lastPage) =>
         lastPage.pagination.hasNextPage
           ? lastPage.pagination.page + 1
@@ -423,10 +443,30 @@ export function BugReportView({ id }: BugReportViewProps) {
     actions: [],
     logs: [],
   }
+  const debuggerSources: DebuggerSourceSummary[] =
+    debuggerSourcesQuery.data ?? []
 
   const networkRequests = useMemo(() => {
     return networkRequestsQuery.data?.pages.flatMap((page) => page.items) ?? []
   }, [networkRequestsQuery.data])
+  const filteredActions = useMemo(() => {
+    if (selectedSourceTabId === null) {
+      return debuggerEvents.actions
+    }
+
+    return debuggerEvents.actions.filter((action) => {
+      return action.source?.tabId === selectedSourceTabId
+    })
+  }, [debuggerEvents.actions, selectedSourceTabId])
+  const filteredLogs = useMemo(() => {
+    if (selectedSourceTabId === null) {
+      return debuggerEvents.logs
+    }
+
+    return debuggerEvents.logs.filter((log) => {
+      return log.source?.tabId === selectedSourceTabId
+    })
+  }, [debuggerEvents.logs, selectedSourceTabId])
 
   const desktopVideoRef = useRef<HTMLVideoElement | null>(null)
   const mobileVideoRef = useRef<HTMLVideoElement | null>(null)
@@ -455,18 +495,18 @@ export function BugReportView({ id }: BugReportViewProps) {
   const actionEntries = useMemo(
     () =>
       applyVideoOffsetFallback(
-        debuggerEvents.actions.map(buildActionEntry),
+        filteredActions.map(buildActionEntry),
         showVideo
       ),
-    [debuggerEvents.actions, showVideo]
+    [filteredActions, showVideo]
   )
   const logEntries = useMemo(
     () =>
       applyVideoOffsetFallback(
-        debuggerEvents.logs.map(buildLogEntry),
+        filteredLogs.map(buildLogEntry),
         showVideo
       ),
-    [debuggerEvents.logs, showVideo]
+    [filteredLogs, showVideo]
   )
   const networkEntries = useMemo(
     () =>
@@ -572,7 +612,7 @@ export function BugReportView({ id }: BugReportViewProps) {
     onTabChange: handleTabChange,
     timeline: {
       actions: {
-        actions: debuggerEvents.actions,
+        actions: filteredActions,
         entries: actionEntries,
         selectedEntryId: selectedEntryIds.action,
         highlightedEntryIds: highlightedActionEntryIds,
@@ -582,6 +622,11 @@ export function BugReportView({ id }: BugReportViewProps) {
         selectedEntryId: selectedEntryIds.log,
         highlightedEntryIds: highlightedLogEntryIds,
       },
+    },
+    sourceFilter: {
+      activeSourceTabId: selectedSourceTabId,
+      onSourceChange: setSelectedSourceTabId,
+      sources: debuggerSources,
     },
     network: {
       entries: networkEntries,

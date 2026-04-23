@@ -78,7 +78,7 @@ export function registerDebuggerBackgroundListeners(): void {
         }
         case ENSURE_PAGE_RUNTIME_MESSAGE: {
           if (typeof tabId === "number") {
-            await store.injectDebuggerScriptForTab(tabId)
+            await store.syncTabWithSessions(tabId, sender.tab)
           }
           safeSendResponse({ ok: true, data: undefined })
           return
@@ -117,18 +117,56 @@ export function registerDebuggerBackgroundListeners(): void {
         ? changeInfo.url
         : (tab.url ?? undefined)
 
-    store.ensureDebuggerScriptForTab(tabId, url).catch((error: unknown) => {
+    const tabWithResolvedUrl = {
+      ...tab,
+      url,
+    }
+
+    store.syncTabWithSessions(tabId, tabWithResolvedUrl).catch(
+      (error: unknown) => {
+        reportNonFatalError(
+          `Failed to sync debugger instrumentation after tab update for tab ${tabId}`,
+          error
+        )
+      }
+    )
+  })
+
+  chrome.tabs.onCreated.addListener((tab) => {
+    if (typeof tab.id !== "number") {
+      return
+    }
+
+    store.syncTabWithSessions(tab.id, tab).catch((error: unknown) => {
       reportNonFatalError(
-        `Failed to reinject debugger instrumentation after tab update for tab ${tabId}`,
+        `Failed to sync debugger instrumentation after tab creation for tab ${tab.id}`,
+        error
+      )
+    })
+  })
+
+  chrome.tabs.onActivated.addListener(({ tabId }) => {
+    store.syncTabWithSessions(tabId).catch((error: unknown) => {
+      reportNonFatalError(
+        `Failed to sync debugger instrumentation after activating tab ${tabId}`,
+        error
+      )
+    })
+  })
+
+  chrome.tabs.onAttached.addListener((tabId) => {
+    store.syncTabWithSessions(tabId).catch((error: unknown) => {
+      reportNonFatalError(
+        `Failed to sync debugger instrumentation after attaching tab ${tabId}`,
         error
       )
     })
   })
 
   chrome.tabs.onRemoved.addListener((tabId) => {
-    store.discardSessionByTabId(tabId).catch((error: unknown) => {
+    store.handleTabRemoved(tabId).catch((error: unknown) => {
       reportNonFatalError(
-        `Failed to discard debugger session for removed tab ${tabId}`,
+        `Failed to update debugger session for removed tab ${tabId}`,
         error
       )
     })

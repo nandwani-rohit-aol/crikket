@@ -126,9 +126,12 @@ export class DebuggerCollector {
     const payload = buildDebuggerSubmissionPayload({
       sessionId: this.session.sessionId,
       captureTabId: 0,
+      captureScope: "tab",
       captureType: this.session.captureType,
+      captureWindowId: null,
       startedAt: this.session.startedAt,
       recordingStartedAt: this.session.recordingStartedAt,
+      trackedTabIds: [0],
       events: this.session.events,
     })
 

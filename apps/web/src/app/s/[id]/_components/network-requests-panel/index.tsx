@@ -18,6 +18,7 @@ import { NetworkRequestDetails } from "./network-request-details"
 import { EmptyState } from "./panel-sections"
 import type { NetworkRequestsPanelProps } from "./types"
 import { safeParseUrl, statusTone } from "./utils"
+import { getSourceLabel } from "../utils"
 
 const REQUEST_LIST_DEFAULT_HEIGHT = "300px"
 const REQUEST_LIST_MIN_HEIGHT = "190px"
@@ -207,6 +208,9 @@ export function NetworkRequestsPanel({
                   const primaryText = parsed
                     ? `${parsed.pathname}${parsed.search}`
                     : (request?.url ?? entry.detail)
+                  const sourceLabel = request
+                    ? getSourceLabel(request.source)
+                    : entry.sourceLabel
 
                   return (
                     <button
@@ -241,9 +245,16 @@ export function NetworkRequestsPanel({
                         )}
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="truncate font-mono text-[10px] text-muted-foreground">
-                          {parsed?.host ?? "Unknown host"}
-                        </span>
+                        <div className="min-w-0">
+                          <span className="truncate font-mono text-[10px] text-muted-foreground">
+                            {parsed?.host ?? "Unknown host"}
+                          </span>
+                          {sourceLabel ? (
+                            <p className="truncate text-[10px] text-muted-foreground/90">
+                              {sourceLabel}
+                            </p>
+                          ) : null}
+                        </div>
                         <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
                           {typeof duration === "number" && (
                             <span>{duration}ms</span>

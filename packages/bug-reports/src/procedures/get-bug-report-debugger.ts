@@ -2,6 +2,7 @@ import { buildPaginationMeta } from "@crikket/shared/lib/server/pagination"
 import { ORPCError } from "@orpc/server"
 
 import {
+  getBugReportDebuggerSources as getBugReportDebuggerSourcesData,
   countBugReportNetworkRequests,
   getBugReportDebuggerEventsData,
   getBugReportNetworkRequestPayload as getBugReportNetworkRequestPayloadData,
@@ -27,6 +28,17 @@ export const getBugReportDebuggerEvents = o
     return getBugReportDebuggerEventsData(input.id)
   })
 
+export const getBugReportDebuggerSources = o
+  .input(bugReportIdInputSchema)
+  .handler(async ({ context, input }) => {
+    await assertBugReportAccessById({
+      id: input.id,
+      session: context.session,
+    })
+
+    return getBugReportDebuggerSourcesData(input.id)
+  })
+
 export const getBugReportNetworkRequests = o
   .input(debuggerNetworkRequestsInputSchema)
   .handler(async ({ context, input }) => {
@@ -45,12 +57,14 @@ export const getBugReportNetworkRequests = o
       countBugReportNetworkRequests({
         bugReportId: input.id,
         search: input.search,
+        sourceTabId: input.sourceTabId,
       }),
       getBugReportNetworkRequestsPage({
         bugReportId: input.id,
         limit,
         offset,
         search: input.search,
+        sourceTabId: input.sourceTabId,
       }),
     ])
 

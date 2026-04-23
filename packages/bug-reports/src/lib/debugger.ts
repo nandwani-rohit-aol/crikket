@@ -15,6 +15,17 @@ const MAX_OFFSET_MS = 24 * 60 * 60 * 1000
 
 const debuggerMetadataSchema = z.record(z.string(), z.unknown()).optional()
 const debuggerHeadersSchema = z.record(z.string(), z.string()).optional()
+const debuggerSourceValueSchema = z
+  .object({
+    tabId: z.number().int().nonnegative(),
+    windowId: z.number().int().nonnegative().optional(),
+    title: z.string().max(4000).optional(),
+    url: z.string().max(4096).optional(),
+  })
+const debuggerSourceSchema = debuggerSourceValueSchema.optional()
+const debuggerSourceMapSchema = z
+  .record(z.string(), debuggerSourceValueSchema)
+  .optional()
 const debuggerUnknownArraySchema = z
   .array(z.unknown())
   .max(MAX_DEBUGGER_ITEMS_PER_KIND)
@@ -31,6 +42,8 @@ const debuggerActionSchema = z.object({
     .max(MAX_OFFSET_MS)
     .nullable()
     .optional(),
+  sourceId: z.number().int().nonnegative().optional(),
+  source: debuggerSourceSchema,
   metadata: debuggerMetadataSchema,
 })
 
@@ -45,6 +58,8 @@ const debuggerLogSchema = z.object({
     .max(MAX_OFFSET_MS)
     .nullable()
     .optional(),
+  sourceId: z.number().int().nonnegative().optional(),
+  source: debuggerSourceSchema,
   metadata: debuggerMetadataSchema,
 })
 
@@ -65,10 +80,13 @@ const debuggerNetworkRequestSchema = z.object({
     .max(MAX_OFFSET_MS)
     .nullable()
     .optional(),
+  sourceId: z.number().int().nonnegative().optional(),
+  source: debuggerSourceSchema,
 })
 
 export const bugReportDebuggerInputSchema = z
   .object({
+    sources: debuggerSourceMapSchema,
     actions: debuggerUnknownArraySchema,
     logs: debuggerUnknownArraySchema,
     networkRequests: debuggerUnknownArraySchema,
@@ -99,6 +117,7 @@ export interface BugReportDebuggerEventsData {
     target: string | null
     timestamp: string
     offset: number | null
+    source: BugReportDebuggerSource | null
     metadata: Record<string, unknown> | null
   }>
   logs: Array<{
@@ -107,8 +126,23 @@ export interface BugReportDebuggerEventsData {
     message: string
     timestamp: string
     offset: number | null
+    source: BugReportDebuggerSource | null
     metadata: Record<string, unknown> | null
   }>
+}
+
+export interface BugReportDebuggerSource {
+  tabId: number
+  windowId: number | null
+  title: string | null
+  url: string | null
+}
+
+export interface BugReportDebuggerSourceSummary
+  extends BugReportDebuggerSource {
+  actionCount: number
+  logCount: number
+  networkRequestCount: number
 }
 
 export interface BugReportNetworkRequestListItem {
@@ -121,6 +155,7 @@ export interface BugReportNetworkRequestListItem {
   responseHeaders: Record<string, string> | null
   timestamp: string
   offset: number | null
+  source: BugReportDebuggerSource | null
 }
 
 export interface BugReportNetworkRequestPayload {
@@ -133,6 +168,7 @@ export interface BugReportNetworkRequestsPageInput {
   limit: number
   offset: number
   search?: string
+  sourceTabId?: number
 }
 
 export interface BugReportNetworkRequestPayloadInput {
@@ -157,6 +193,7 @@ export async function clearBugReportDebuggerData(
 export async function countBugReportNetworkRequests(input: {
   bugReportId: string
   search?: string
+  sourceTabId?: number
 }): Promise<number> {
   const result = await db
     .select({ value: count() })
@@ -171,6 +208,7 @@ export async function getBugReportNetworkRequestsPage({
   limit,
   offset,
   search,
+  sourceTabId,
 }: BugReportNetworkRequestsPageInput): Promise<
   BugReportNetworkRequestListItem[]
 > {
@@ -185,9 +223,10 @@ export async function getBugReportNetworkRequestsPage({
       responseHeaders: bugReportNetworkRequest.responseHeaders,
       timestamp: bugReportNetworkRequest.timestamp,
       offset: bugReportNetworkRequest.offset,
+      source: bugReportNetworkRequest.source,
     })
     .from(bugReportNetworkRequest)
-    .where(buildNetworkRequestsWhere({ bugReportId, search }))
+    .where(buildNetworkRequestsWhere({ bugReportId, search, sourceTabId }))
     .orderBy(asc(bugReportNetworkRequest.timestamp))
     .limit(limit)
     .offset(offset)
@@ -203,6 +242,7 @@ export async function getBugReportNetworkRequestsPage({
       responseHeaders: asStringRecord(request.responseHeaders),
       timestamp: request.timestamp.toISOString(),
       offset: request.offset,
+      source: asDebuggerSource(request.source),
     }
   })
 }
@@ -238,11 +278,16 @@ export async function getBugReportNetworkRequestPayload({
 function buildNetworkRequestsWhere(input: {
   bugReportId: string
   search?: string
+  sourceTabId?: number
 }) {
-  const bugReportCondition = eq(
-    bugReportNetworkRequest.bugReportId,
-    input.bugReportId
-  )
+  const conditions = [
+    eq(bugReportNetworkRequest.bugReportId, input.bugReportId),
+    typeof input.sourceTabId === "number"
+      ? eq(bugReportNetworkRequest.sourceTabId, input.sourceTabId)
+      : undefined,
+  ].filter(Boolean)
+
+  const bugReportCondition = and(...conditions) ?? conditions[0]
 
   if (!input.search) {
     return bugReportCondition
@@ -286,6 +331,8 @@ export async function persistBugReportDebuggerData(
     }
   }
 
+  const sourceLookup = parseDebuggerSources(debuggerData.sources, warnings)
+
   const actions = parseDebuggerItems(
     debuggerData.actions,
     debuggerActionSchema,
@@ -309,15 +356,21 @@ export async function persistBugReportDebuggerData(
     try {
       await retryOnUniqueViolation(async () => {
         await db.insert(bugReportAction).values(
-          actions.map((action) => ({
-            id: nanoid(16),
-            bugReportId,
-            type: action.type,
-            target: action.target,
-            timestamp: new Date(action.timestamp),
-            offset: normalizeOffset(action.offset),
-            metadata: action.metadata,
-          }))
+          actions.map((action) => {
+            const source = resolveDebuggerItemSource(action, sourceLookup)
+
+            return {
+              id: nanoid(16),
+              bugReportId,
+              type: action.type,
+              target: action.target,
+              timestamp: new Date(action.timestamp),
+              offset: normalizeOffset(action.offset),
+              sourceTabId: source?.tabId ?? null,
+              source: source ?? null,
+              metadata: action.metadata,
+            }
+          })
         )
       })
       persisted.actions = actions.length
@@ -334,15 +387,21 @@ export async function persistBugReportDebuggerData(
     try {
       await retryOnUniqueViolation(async () => {
         await db.insert(bugReportLog).values(
-          logs.map((log) => ({
-            id: nanoid(16),
-            bugReportId,
-            level: log.level,
-            message: log.message,
-            timestamp: new Date(log.timestamp),
-            offset: normalizeOffset(log.offset),
-            metadata: log.metadata,
-          }))
+          logs.map((log) => {
+            const source = resolveDebuggerItemSource(log, sourceLookup)
+
+            return {
+              id: nanoid(16),
+              bugReportId,
+              level: log.level,
+              message: log.message,
+              timestamp: new Date(log.timestamp),
+              offset: normalizeOffset(log.offset),
+              sourceTabId: source?.tabId ?? null,
+              source: source ?? null,
+              metadata: log.metadata,
+            }
+          })
         )
       })
       persisted.logs = logs.length
@@ -359,20 +418,26 @@ export async function persistBugReportDebuggerData(
     try {
       await retryOnUniqueViolation(async () => {
         await db.insert(bugReportNetworkRequest).values(
-          networkRequests.map((request) => ({
-            id: nanoid(16),
-            bugReportId,
-            method: request.method,
-            url: request.url,
-            status: request.status ?? null,
-            duration: request.duration ?? null,
-            requestHeaders: request.requestHeaders,
-            responseHeaders: request.responseHeaders,
-            requestBody: request.requestBody,
-            responseBody: request.responseBody,
-            timestamp: new Date(request.timestamp),
-            offset: normalizeOffset(request.offset),
-          }))
+          networkRequests.map((request) => {
+            const source = resolveDebuggerItemSource(request, sourceLookup)
+
+            return {
+              id: nanoid(16),
+              bugReportId,
+              method: request.method,
+              url: request.url,
+              status: request.status ?? null,
+              duration: request.duration ?? null,
+              requestHeaders: request.requestHeaders,
+              responseHeaders: request.responseHeaders,
+              requestBody: request.requestBody,
+              responseBody: request.responseBody,
+              timestamp: new Date(request.timestamp),
+              offset: normalizeOffset(request.offset),
+              sourceTabId: source?.tabId ?? null,
+              source: source ?? null,
+            }
+          })
         )
       })
       persisted.networkRequests = networkRequests.length
@@ -404,6 +469,7 @@ export async function getBugReportDebuggerEventsData(
         target: bugReportAction.target,
         timestamp: bugReportAction.timestamp,
         offset: bugReportAction.offset,
+        source: bugReportAction.source,
         metadata: bugReportAction.metadata,
       })
       .from(bugReportAction)
@@ -416,6 +482,7 @@ export async function getBugReportDebuggerEventsData(
         message: bugReportLog.message,
         timestamp: bugReportLog.timestamp,
         offset: bugReportLog.offset,
+        source: bugReportLog.source,
         metadata: bugReportLog.metadata,
       })
       .from(bugReportLog)
@@ -430,6 +497,7 @@ export async function getBugReportDebuggerEventsData(
       target: action.target,
       timestamp: action.timestamp.toISOString(),
       offset: action.offset,
+      source: asDebuggerSource(action.source),
       metadata: asUnknownRecord(action.metadata),
     })),
     logs: logs.map((log) => ({
@@ -438,9 +506,109 @@ export async function getBugReportDebuggerEventsData(
       message: log.message,
       timestamp: log.timestamp.toISOString(),
       offset: log.offset,
+      source: asDebuggerSource(log.source),
       metadata: asUnknownRecord(log.metadata),
     })),
   }
+}
+
+export async function getBugReportDebuggerSources(
+  bugReportId: string
+): Promise<BugReportDebuggerSourceSummary[]> {
+  const [actions, logs, networkRequests] = await Promise.all([
+    db
+      .select({
+        sourceTabId: bugReportAction.sourceTabId,
+        source: bugReportAction.source,
+      })
+      .from(bugReportAction)
+      .where(eq(bugReportAction.bugReportId, bugReportId)),
+    db
+      .select({
+        sourceTabId: bugReportLog.sourceTabId,
+        source: bugReportLog.source,
+      })
+      .from(bugReportLog)
+      .where(eq(bugReportLog.bugReportId, bugReportId)),
+    db
+      .select({
+        sourceTabId: bugReportNetworkRequest.sourceTabId,
+        source: bugReportNetworkRequest.source,
+      })
+      .from(bugReportNetworkRequest)
+      .where(eq(bugReportNetworkRequest.bugReportId, bugReportId)),
+  ])
+
+  const summaries = new Map<number, BugReportDebuggerSourceSummary>()
+
+  const ensureSummary = (
+    sourceTabId: number | null,
+    source: unknown
+  ): BugReportDebuggerSourceSummary | null => {
+    if (typeof sourceTabId !== "number") {
+      return null
+    }
+
+    const normalizedSource = asDebuggerSource(source)
+    const existing = summaries.get(sourceTabId)
+    if (existing) {
+      if (!existing.title && normalizedSource?.title) {
+        existing.title = normalizedSource.title
+      }
+      if (!existing.url && normalizedSource?.url) {
+        existing.url = normalizedSource.url
+      }
+      if (
+        existing.windowId === null &&
+        typeof normalizedSource?.windowId === "number"
+      ) {
+        existing.windowId = normalizedSource.windowId
+      }
+      return existing
+    }
+
+    const created: BugReportDebuggerSourceSummary = {
+      tabId: sourceTabId,
+      windowId: normalizedSource?.windowId ?? null,
+      title: normalizedSource?.title ?? null,
+      url: normalizedSource?.url ?? null,
+      actionCount: 0,
+      logCount: 0,
+      networkRequestCount: 0,
+    }
+    summaries.set(sourceTabId, created)
+    return created
+  }
+
+  for (const action of actions) {
+    const summary = ensureSummary(action.sourceTabId, action.source)
+    if (summary) {
+      summary.actionCount += 1
+    }
+  }
+
+  for (const log of logs) {
+    const summary = ensureSummary(log.sourceTabId, log.source)
+    if (summary) {
+      summary.logCount += 1
+    }
+  }
+
+  for (const request of networkRequests) {
+    const summary = ensureSummary(request.sourceTabId, request.source)
+    if (summary) {
+      summary.networkRequestCount += 1
+    }
+  }
+
+  return [...summaries.values()].sort((a, b) => {
+    const countA = a.actionCount + a.logCount + a.networkRequestCount
+    const countB = b.actionCount + b.logCount + b.networkRequestCount
+    if (countA !== countB) {
+      return countB - countA
+    }
+    return a.tabId - b.tabId
+  })
 }
 
 function normalizeOffset(value: number | null | undefined): number | null {
@@ -463,6 +631,29 @@ function asUnknownRecord(value: unknown): Record<string, unknown> | null {
   return value
 }
 
+function asDebuggerSource(value: unknown): BugReportDebuggerSource | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const tabId = value.tabId
+  if (typeof tabId !== "number" || !Number.isFinite(tabId)) {
+    return null
+  }
+
+  const windowId =
+    typeof value.windowId === "number" && Number.isFinite(value.windowId)
+      ? Math.floor(value.windowId)
+      : null
+
+  return {
+    tabId: Math.floor(tabId),
+    windowId,
+    title: typeof value.title === "string" ? value.title : null,
+    url: typeof value.url === "string" ? value.url : null,
+  }
+}
+
 function asStringRecord(value: unknown): Record<string, string> | null {
   if (!isRecord(value)) {
     return null
@@ -479,6 +670,59 @@ function asStringRecord(value: unknown): Record<string, string> | null {
   }
 
   return Object.keys(result).length > 0 ? result : null
+}
+
+function parseDebuggerSources(
+  input: unknown,
+  warnings: string[]
+): Map<number, BugReportDebuggerSource> {
+  if (input === undefined) {
+    return new Map()
+  }
+
+  const parsed = debuggerSourceMapSchema.safeParse(input)
+  if (!parsed.success) {
+    warnings.push("Skipped invalid debugger source metadata before saving.")
+    return new Map()
+  }
+
+  const sources = new Map<number, BugReportDebuggerSource>()
+
+  for (const [sourceId, source] of Object.entries(parsed.data ?? {})) {
+    const normalizedSourceId = Number(sourceId)
+    if (!Number.isInteger(normalizedSourceId) || normalizedSourceId < 0) {
+      continue
+    }
+
+    sources.set(normalizedSourceId, {
+      tabId: source.tabId,
+      windowId: source.windowId ?? null,
+      title: source.title ?? null,
+      url: source.url ?? null,
+    })
+  }
+
+  return sources
+}
+
+function resolveDebuggerItemSource(
+  item: { source?: z.infer<typeof debuggerSourceValueSchema>; sourceId?: number },
+  sourceLookup: Map<number, BugReportDebuggerSource>
+): BugReportDebuggerSource | null {
+  if (item.source) {
+    return {
+      tabId: item.source.tabId,
+      windowId: item.source.windowId ?? null,
+      title: item.source.title ?? null,
+      url: item.source.url ?? null,
+    }
+  }
+
+  if (typeof item.sourceId !== "number") {
+    return null
+  }
+
+  return sourceLookup.get(item.sourceId) ?? null
 }
 
 function parseDebuggerItems<TParsed>(

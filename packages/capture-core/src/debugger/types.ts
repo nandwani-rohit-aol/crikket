@@ -10,6 +10,19 @@ import type {
 } from "./constants"
 
 export type DebuggerCaptureType = "video" | "screenshot"
+export type DebuggerCaptureScope = "tab" | "window"
+
+export interface DebuggerEventSource {
+  tabId: number
+  windowId?: number
+  title?: string
+  url?: string
+}
+
+export interface BugReportDebuggerPayloadSourceReference {
+  sourceId?: number
+  source?: DebuggerEventSource
+}
 
 export type DebuggerActionType =
   | "click"
@@ -25,6 +38,7 @@ export interface DebuggerActionEvent {
   actionType: DebuggerActionType | string
   target?: string
   metadata?: Record<string, unknown>
+  source?: DebuggerEventSource
 }
 
 export interface DebuggerConsoleEvent {
@@ -33,6 +47,7 @@ export interface DebuggerConsoleEvent {
   level: "log" | "info" | "warn" | "error" | "debug"
   message: string
   metadata?: Record<string, unknown>
+  source?: DebuggerEventSource
 }
 
 export interface DebuggerNetworkEvent {
@@ -46,6 +61,7 @@ export interface DebuggerNetworkEvent {
   responseHeaders?: Record<string, string>
   requestBody?: string
   responseBody?: string
+  source?: DebuggerEventSource
 }
 
 export type DebuggerEvent =
@@ -56,27 +72,31 @@ export type DebuggerEvent =
 export interface DebuggerSessionSnapshot {
   sessionId: string
   captureTabId: number
+  captureScope: DebuggerCaptureScope
   captureType: DebuggerCaptureType
+  captureWindowId: number | null
   startedAt: number
   recordingStartedAt: number | null
+  trackedTabIds: number[]
   events: DebuggerEvent[]
 }
 
 export interface BugReportDebuggerPayload {
+  sources?: Record<string, DebuggerEventSource>
   actions: Array<{
     type: string
     target?: string
     timestamp: string
     offset: number | null
     metadata?: Record<string, unknown>
-  }>
+  } & BugReportDebuggerPayloadSourceReference>
   logs: Array<{
     level: "log" | "info" | "warn" | "error" | "debug"
     message: string
     timestamp: string
     offset: number | null
     metadata?: Record<string, unknown>
-  }>
+  } & BugReportDebuggerPayloadSourceReference>
   networkRequests: Array<{
     method: string
     url: string
@@ -88,7 +108,7 @@ export interface BugReportDebuggerPayload {
     responseBody?: string
     timestamp: string
     offset: number | null
-  }>
+  } & BugReportDebuggerPayloadSourceReference>
 }
 
 export interface DebuggerStartSessionResponse {
@@ -114,7 +134,9 @@ export interface DebuggerStartSessionMessage {
   type: typeof START_SESSION_MESSAGE
   payload: {
     captureTabId: number
+    captureScope?: DebuggerCaptureScope
     captureType: DebuggerCaptureType
+    captureWindowId?: number
     instantReplayLookbackMs?: number
   }
 }
@@ -178,8 +200,11 @@ export interface DebuggerContentBridgePayload {
 export interface StoredDebuggerSession {
   sessionId: string
   captureTabId: number
+  captureScope: DebuggerCaptureScope
   captureType: DebuggerCaptureType
+  captureWindowId: number | null
   startedAt: number
   recordingStartedAt: number | null
+  trackedTabIds: number[]
   events: DebuggerEvent[]
 }

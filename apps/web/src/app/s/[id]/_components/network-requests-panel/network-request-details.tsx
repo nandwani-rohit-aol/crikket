@@ -16,6 +16,7 @@ import {
   safeParseUrl,
   statusTone,
 } from "./utils"
+import { getSourceLabel } from "../utils"
 
 const DETAIL_SECTION_VALUES = ["overview", "request", "response"] as const
 
@@ -61,6 +62,7 @@ export function NetworkRequestDetails({
   const pathLabel = parsedUrl
     ? `${parsedUrl.pathname}${parsedUrl.search}`
     : request.url
+  const sourceLabel = getSourceLabel(request.source)
 
   const onCopy = async (key: string, value: string | null | undefined) => {
     if (!(value && navigator.clipboard)) {
@@ -115,6 +117,11 @@ export function NetworkRequestDetails({
           {parsedUrl?.origin ?? "Unknown origin"} •{" "}
           {new Date(request.timestamp).toLocaleString()}
         </p>
+        {sourceLabel ? (
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Captured from {sourceLabel}
+          </p>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-3 gap-1 rounded-lg border bg-background p-1">

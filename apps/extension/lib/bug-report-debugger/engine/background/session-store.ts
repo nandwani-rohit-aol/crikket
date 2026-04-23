@@ -9,7 +9,9 @@ import {
   normalizeStoredSession,
 } from "@crikket/capture-core/debugger/normalize"
 import type {
+  DebuggerCaptureScope,
   DebuggerEvent,
+  DebuggerEventSource,
   DebuggerSessionSnapshot,
   StoredDebuggerSession,
 } from "@crikket/capture-core/debugger/types"
@@ -22,7 +24,9 @@ import {
 
 interface StartSessionPayload {
   captureTabId: number
+  captureScope?: DebuggerCaptureScope
   captureType: "video" | "screenshot"
+  captureWindowId?: number
   instantReplayLookbackMs?: number
 }
 
@@ -31,8 +35,14 @@ interface MarkRecordingStartedPayload {
   recordingStartedAt: number
 }
 
+interface TrackedTabState {
+  tabId: number
+  title?: string
+  url?: string
+  windowId: number
+}
+
 interface DebuggerSessionStore {
-  injectDebuggerScriptForTab: (tabId: number) => Promise<void>
   startSession: (payload: StartSessionPayload) => Promise<{
     sessionId: string
     startedAt: number
@@ -45,14 +55,16 @@ interface DebuggerSessionStore {
     payload: MarkRecordingStartedPayload
   ) => Promise<void>
   discardSession: (sessionId: string) => Promise<void>
-  ensureDebuggerScriptForTab: (tabId: number, url?: string) => Promise<void>
-  discardSessionByTabId: (tabId: number) => Promise<void>
+  syncTabWithSessions: (tabId: number, tab?: chrome.tabs.Tab) => Promise<void>
+  handleTabRemoved: (tabId: number) => Promise<void>
 }
 
 export function createDebuggerSessionStore(): DebuggerSessionStore {
   const sessionsById = new Map<string, StoredDebuggerSession>()
   const tabToSession = new Map<number, string>()
+  const windowToSession = new Map<number, string>()
   const recentEventsByTab = new Map<number, DebuggerEvent[]>()
+  const trackedTabsById = new Map<number, TrackedTabState>()
 
   let isLoaded = false
   let loadPromise: Promise<void> | null = null
@@ -79,6 +91,21 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
     })
   }
 
+  const registerSessionAssociations = (session: StoredDebuggerSession) => {
+    if (session.captureScope === "window" && session.captureWindowId !== null) {
+      windowToSession.set(session.captureWindowId, session.sessionId)
+    }
+
+    const trackedTabIds =
+      session.trackedTabIds.length > 0
+        ? session.trackedTabIds
+        : [session.captureTabId]
+
+    for (const tabId of trackedTabIds) {
+      tabToSession.set(tabId, session.sessionId)
+    }
+  }
+
   const hydrateStoredState = async () => {
     const result = await chrome.storage.local.get([
       DEBUGGER_SESSIONS_STORAGE_KEY,
@@ -96,7 +123,7 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
       }
 
       sessionsById.set(session.sessionId, session)
-      tabToSession.set(session.captureTabId, session.sessionId)
+      registerSessionAssociations(session)
     }
   }
 
@@ -122,6 +149,90 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
     await loadPromise
   }
 
+  const setTrackedTabState = (tab: chrome.tabs.Tab): TrackedTabState | null => {
+    if (typeof tab.id !== "number" || typeof tab.windowId !== "number") {
+      return null
+    }
+
+    const trackedState: TrackedTabState = {
+      tabId: tab.id,
+      title: tab.title ?? undefined,
+      url: tab.url ?? undefined,
+      windowId: tab.windowId,
+    }
+
+    trackedTabsById.set(tab.id, trackedState)
+    return trackedState
+  }
+
+  const resolveTrackedTabState = async (
+    tabId: number,
+    tab?: chrome.tabs.Tab
+  ): Promise<TrackedTabState | null> => {
+    if (tab) {
+      return setTrackedTabState(tab)
+    }
+
+    const cached = trackedTabsById.get(tabId)
+    if (cached) {
+      return cached
+    }
+
+    try {
+      const resolvedTab = await chrome.tabs.get(tabId)
+      return setTrackedTabState(resolvedTab)
+    } catch {
+      return null
+    }
+  }
+
+  const trackTabForSession = (
+    session: StoredDebuggerSession,
+    tabId: number,
+    trackedTabState?: TrackedTabState | null
+  ): boolean => {
+    let changed = false
+
+    if (!session.trackedTabIds.includes(tabId)) {
+      session.trackedTabIds.push(tabId)
+      changed = true
+    }
+
+    if (tabToSession.get(tabId) !== session.sessionId) {
+      tabToSession.set(tabId, session.sessionId)
+      changed = true
+    }
+
+    if (trackedTabState) {
+      trackedTabsById.set(tabId, trackedTabState)
+    }
+
+    return changed
+  }
+
+  const untrackTabFromSession = (
+    session: StoredDebuggerSession,
+    tabId: number
+  ): boolean => {
+    let changed = false
+
+    const trackedTabIndex = session.trackedTabIds.indexOf(tabId)
+    if (trackedTabIndex >= 0) {
+      session.trackedTabIds.splice(trackedTabIndex, 1)
+      changed = true
+    }
+
+    if (tabToSession.get(tabId) === session.sessionId) {
+      tabToSession.delete(tabId)
+      changed = true
+    }
+
+    trackedTabsById.delete(tabId)
+    recentEventsByTab.delete(tabId)
+
+    return changed
+  }
+
   const removeSession = (sessionId: string) => {
     const session = sessionsById.get(sessionId)
     if (!session) {
@@ -130,9 +241,26 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
 
     sessionsById.delete(sessionId)
 
-    const activeSessionId = tabToSession.get(session.captureTabId)
-    if (activeSessionId === sessionId) {
-      tabToSession.delete(session.captureTabId)
+    if (
+      session.captureScope === "window" &&
+      session.captureWindowId !== null &&
+      windowToSession.get(session.captureWindowId) === sessionId
+    ) {
+      windowToSession.delete(session.captureWindowId)
+    }
+
+    const trackedTabIds =
+      session.trackedTabIds.length > 0
+        ? session.trackedTabIds
+        : [session.captureTabId]
+
+    for (const tabId of trackedTabIds) {
+      if (tabToSession.get(tabId) === sessionId) {
+        tabToSession.delete(tabId)
+      }
+
+      trackedTabsById.delete(tabId)
+      recentEventsByTab.delete(tabId)
     }
   }
 
@@ -206,11 +334,104 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
     })
   }
 
+  const buildEventSource = async (
+    tabId: number
+  ): Promise<DebuggerEventSource | undefined> => {
+    const trackedTabState = await resolveTrackedTabState(tabId)
+    if (!trackedTabState) {
+      return {
+        tabId,
+      }
+    }
+
+    return {
+      tabId,
+      title: trackedTabState.title,
+      url: trackedTabState.url,
+      windowId: trackedTabState.windowId,
+    }
+  }
+
+  const syncTabWithSessions = async (
+    tabId: number,
+    tab?: chrome.tabs.Tab
+  ): Promise<void> => {
+    await ensureLoaded()
+
+    const trackedTabState = await resolveTrackedTabState(tabId, tab)
+    if (!trackedTabState) {
+      return
+    }
+
+    let shouldPersist = false
+
+    const activeSessionId = tabToSession.get(tabId)
+    const activeSession = activeSessionId
+      ? sessionsById.get(activeSessionId)
+      : undefined
+
+    if (activeSession) {
+      if (
+        activeSession.captureScope === "window" &&
+        activeSession.captureWindowId !== null &&
+        trackedTabState.windowId !== activeSession.captureWindowId
+      ) {
+        shouldPersist =
+          untrackTabFromSession(activeSession, tabId) || shouldPersist
+      } else {
+        trackTabForSession(activeSession, tabId, trackedTabState)
+
+        if (trackedTabState.url && isInjectablePageUrl(trackedTabState.url)) {
+          await injectDebuggerScriptIntoTab(tabId)
+        }
+
+        if (shouldPersist) {
+          schedulePersist()
+        }
+        return
+      }
+    }
+
+    const windowSessionId = windowToSession.get(trackedTabState.windowId)
+    const windowSession = windowSessionId
+      ? sessionsById.get(windowSessionId)
+      : undefined
+
+    if (!windowSession || windowSession.captureScope !== "window") {
+      if (shouldPersist) {
+        schedulePersist()
+      }
+      return
+    }
+
+    shouldPersist =
+      trackTabForSession(windowSession, tabId, trackedTabState) || shouldPersist
+
+    if (trackedTabState.url && isInjectablePageUrl(trackedTabState.url)) {
+      await injectDebuggerScriptIntoTab(tabId)
+    }
+
+    if (shouldPersist) {
+      schedulePersist()
+    }
+  }
+
   const startSession = async (payload: StartSessionPayload) => {
     await ensureLoaded()
 
     const startedAt = Date.now()
     const sessionId = createSessionId()
+    const captureScope: DebuggerCaptureScope =
+      payload.captureScope === "window" &&
+      typeof payload.captureWindowId === "number"
+        ? "window"
+        : "tab"
+    const captureWindowId =
+      captureScope === "window" &&
+      Number.isFinite(payload.captureWindowId) &&
+      typeof payload.captureWindowId === "number"
+        ? Math.floor(payload.captureWindowId)
+        : null
     const instantReplayLookbackMs =
       typeof payload.instantReplayLookbackMs === "number" &&
       Number.isFinite(payload.instantReplayLookbackMs) &&
@@ -228,32 +449,52 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
     const session: StoredDebuggerSession = {
       sessionId,
       captureTabId: payload.captureTabId,
+      captureScope,
       captureType: payload.captureType,
+      captureWindowId,
       startedAt,
       recordingStartedAt:
         payload.captureType === "screenshot" ? startedAt : null,
+      trackedTabIds: [payload.captureTabId],
       events: instantReplayEvents,
     }
 
     sessionsById.set(sessionId, session)
-    tabToSession.set(payload.captureTabId, sessionId)
+    registerSessionAssociations(session)
+
+    if (captureScope === "window" && captureWindowId !== null) {
+      const windowTabs = await chrome.tabs.query({
+        windowId: captureWindowId,
+      })
+
+      for (const tabInWindow of windowTabs) {
+        const trackedTabState = setTrackedTabState(tabInWindow)
+        if (!trackedTabState) {
+          continue
+        }
+
+        if (
+          trackedTabState.tabId === payload.captureTabId ||
+          (trackedTabState.url && isInjectablePageUrl(trackedTabState.url))
+        ) {
+          trackTabForSession(session, trackedTabState.tabId, trackedTabState)
+        }
+
+        if (trackedTabState.url && isInjectablePageUrl(trackedTabState.url)) {
+          await injectDebuggerScriptIntoTab(trackedTabState.tabId)
+        }
+      }
+    } else {
+      await syncTabWithSessions(payload.captureTabId)
+      await injectDebuggerScriptIntoTab(payload.captureTabId)
+    }
+
     schedulePersist()
-    await injectDebuggerScriptIntoTab(payload.captureTabId)
 
     return {
       sessionId,
       startedAt,
     }
-  }
-
-  const injectDebuggerScriptForTab = async (tabId: number): Promise<void> => {
-    await ensureLoaded()
-
-    if (!tabToSession.has(tabId)) {
-      return
-    }
-
-    await injectDebuggerScriptIntoTab(tabId)
   }
 
   const appendPageEvents = async (tabId: number, rawEvents: unknown[]) => {
@@ -263,6 +504,11 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
       return
     }
 
+    if (!tabToSession.has(tabId)) {
+      await syncTabWithSessions(tabId)
+    }
+
+    const source = await buildEventSource(tabId)
     const normalizedEvents: DebuggerEvent[] = []
     for (const rawEvent of rawEvents) {
       const normalizedEvent = normalizeDebuggerEvent(rawEvent)
@@ -270,7 +516,10 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
         continue
       }
 
-      normalizedEvents.push(normalizedEvent)
+      normalizedEvents.push({
+        ...normalizedEvent,
+        source: normalizedEvent.source ?? source,
+      })
     }
 
     appendEventsToRecentBuffer(tabId, normalizedEvents)
@@ -290,9 +539,12 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
     return {
       sessionId: session.sessionId,
       captureTabId: session.captureTabId,
+      captureScope: session.captureScope,
       captureType: session.captureType,
+      captureWindowId: session.captureWindowId,
       startedAt: session.startedAt,
       recordingStartedAt: session.recordingStartedAt,
+      trackedTabIds: [...session.trackedTabIds],
       events: session.events,
     }
   }
@@ -313,53 +565,46 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
 
   const discardSession = async (sessionId: string) => {
     await ensureLoaded()
-
-    const session = sessionsById.get(sessionId)
     removeSession(sessionId)
-    if (session) {
-      recentEventsByTab.delete(session.captureTabId)
-    }
     schedulePersist()
   }
 
-  const ensureDebuggerScriptForTab = async (
-    tabId: number,
-    url?: string
-  ): Promise<void> => {
-    await ensureLoaded()
-
-    if (!(url && isInjectablePageUrl(url))) {
-      return
-    }
-
-    if (!tabToSession.has(tabId)) {
-      return
-    }
-
-    await injectDebuggerScriptIntoTab(tabId)
-  }
-
-  const discardSessionByTabId = async (tabId: number): Promise<void> => {
+  const handleTabRemoved = async (tabId: number): Promise<void> => {
     await ensureLoaded()
 
     const sessionId = tabToSession.get(tabId)
     if (!sessionId) {
+      trackedTabsById.delete(tabId)
+      recentEventsByTab.delete(tabId)
       return
     }
 
-    removeSession(sessionId)
-    recentEventsByTab.delete(tabId)
-    schedulePersist()
+    const session = sessionsById.get(sessionId)
+    if (!session) {
+      tabToSession.delete(tabId)
+      trackedTabsById.delete(tabId)
+      recentEventsByTab.delete(tabId)
+      return
+    }
+
+    if (session.captureScope === "tab") {
+      removeSession(sessionId)
+      schedulePersist()
+      return
+    }
+
+    if (untrackTabFromSession(session, tabId)) {
+      schedulePersist()
+    }
   }
 
   return {
-    injectDebuggerScriptForTab,
     startSession,
     appendPageEvents,
     getSessionSnapshot,
     markSessionRecordingStarted,
     discardSession,
-    ensureDebuggerScriptForTab,
-    discardSessionByTabId,
+    syncTabWithSessions,
+    handleTabRemoved,
   }
 }

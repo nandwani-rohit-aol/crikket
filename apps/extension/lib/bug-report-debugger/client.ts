@@ -5,6 +5,7 @@ import {
   START_SESSION_MESSAGE,
 } from "@crikket/capture-core/debugger/constants"
 import type {
+  DebuggerCaptureScope,
   DebuggerCaptureType,
   DebuggerSessionSnapshot,
 } from "@crikket/capture-core/debugger/types"
@@ -12,7 +13,9 @@ import { sendDebuggerMessage } from "./messaging"
 
 export function startDebuggerSession(input: {
   captureTabId: number
+  captureScope?: DebuggerCaptureScope
   captureType: DebuggerCaptureType
+  captureWindowId?: number
   instantReplayLookbackMs?: number
 }): Promise<{ sessionId: string; startedAt: number }> {
   return sendDebuggerMessage<{ sessionId: string; startedAt: number }>({
