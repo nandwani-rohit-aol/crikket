@@ -14,9 +14,9 @@ export function requireActiveOrgId(session: SessionContext): string {
   return activeOrgId
 }
 
-export async function requireActiveOrgAdmin(
+export async function requireActiveOrgMember(
   session: SessionContext
-): Promise<string> {
+): Promise<{ organizationId: string; role: string }> {
   const activeOrgId = requireActiveOrgId(session)
 
   const activeMember = await db.query.member.findFirst({
@@ -29,18 +29,45 @@ export async function requireActiveOrgAdmin(
     },
   })
 
-  if (!(activeMember && isOrgAdminRole(activeMember.role))) {
+  if (!activeMember) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "You are not a member of the active organization.",
+    })
+  }
+
+  return {
+    organizationId: activeOrgId,
+    role: activeMember.role,
+  }
+}
+
+export async function requireActiveOrgAdmin(
+  session: SessionContext
+): Promise<string> {
+  const activeMember = await requireActiveOrgMember(session)
+
+  if (!isOrgAdminRole(activeMember.role)) {
     throw new ORPCError("FORBIDDEN", {
       message:
         "Only organization admins or owners can manage capture widget keys.",
     })
   }
 
-  return activeOrgId
+  return activeMember.organizationId
 }
 
-function isOrgAdminRole(role: string): boolean {
+export function isOrgAdminRole(role: string): boolean {
   return role === "owner" || role === "admin"
+}
+
+export function canManageBugReport(input: {
+  reporterId?: string | null
+  viewerRole: string
+  viewerUserId: string
+}): boolean {
+  return (
+    input.reporterId === input.viewerUserId || isOrgAdminRole(input.viewerRole)
+  )
 }
 
 export function normalizeTags(tags?: string[]): string[] | undefined {

@@ -15,7 +15,11 @@ import {
   visibilityValues,
 } from "../lib/utils"
 import { protectedProcedure } from "./context"
-import { normalizeTags, requireActiveOrgId } from "./helpers"
+import {
+  canManageBugReport,
+  normalizeTags,
+  requireActiveOrgMember,
+} from "./helpers"
 
 const priorityValues = Object.values(PRIORITY_OPTIONS) as [
   Priority,
@@ -111,8 +115,36 @@ function buildUpdateValues(input: {
 export const updateBugReport = protectedProcedure
   .input(bugReportUpdateInputSchema)
   .handler(async ({ context, input }) => {
-    const activeOrgId = requireActiveOrgId(context.session)
+    const activeMember = await requireActiveOrgMember(context.session)
     const values = buildUpdateValues(input)
+
+    const existingReport = await db.query.bugReport.findFirst({
+      where: and(
+        eq(bugReport.id, input.id),
+        eq(bugReport.organizationId, activeMember.organizationId)
+      ),
+      columns: {
+        id: true,
+        reporterId: true,
+      },
+    })
+
+    if (!existingReport) {
+      throw new ORPCError("NOT_FOUND", { message: "Bug report not found" })
+    }
+
+    if (
+      !canManageBugReport({
+        reporterId: existingReport.reporterId,
+        viewerRole: activeMember.role,
+        viewerUserId: context.session.user.id,
+      })
+    ) {
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "Only the report creator or organization admins/owners can manage this bug report.",
+      })
+    }
 
     const updated = await db
       .update(bugReport)
@@ -120,7 +152,7 @@ export const updateBugReport = protectedProcedure
       .where(
         and(
           eq(bugReport.id, input.id),
-          eq(bugReport.organizationId, activeOrgId)
+          eq(bugReport.organizationId, activeMember.organizationId)
         )
       )
       .returning({
@@ -154,17 +186,54 @@ export const updateBugReport = protectedProcedure
 export const updateBugReportsBulk = protectedProcedure
   .input(bugReportBulkUpdateInputSchema)
   .handler(async ({ context, input }) => {
-    const activeOrgId = requireActiveOrgId(context.session)
+    const activeMember = await requireActiveOrgMember(context.session)
     const values = buildUpdateValues(input)
     const uniqueIds = Array.from(new Set(input.ids))
+
+    const reports = await db.query.bugReport.findMany({
+      where: and(
+        eq(bugReport.organizationId, activeMember.organizationId),
+        inArray(bugReport.id, uniqueIds)
+      ),
+      columns: {
+        id: true,
+        reporterId: true,
+      },
+    })
+
+    if (reports.length === 0) {
+      return {
+        updatedCount: 0,
+        ids: [],
+      }
+    }
+
+    const hasUnmanageableReport = reports.some(
+      (report) =>
+        !canManageBugReport({
+          reporterId: report.reporterId,
+          viewerRole: activeMember.role,
+          viewerUserId: context.session.user.id,
+        })
+    )
+
+    if (hasUnmanageableReport) {
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "Only report creators or organization admins/owners can manage the selected bug reports.",
+      })
+    }
 
     const updated = await db
       .update(bugReport)
       .set(values)
       .where(
         and(
-          eq(bugReport.organizationId, activeOrgId),
-          inArray(bugReport.id, uniqueIds)
+          eq(bugReport.organizationId, activeMember.organizationId),
+          inArray(
+            bugReport.id,
+            reports.map((report) => report.id)
+          )
         )
       )
       .returning({ id: bugReport.id })
@@ -183,7 +252,35 @@ export const updateBugReportVisibility = protectedProcedure
     })
   )
   .handler(async ({ context, input }) => {
-    const activeOrgId = requireActiveOrgId(context.session)
+    const activeMember = await requireActiveOrgMember(context.session)
+
+    const existingReport = await db.query.bugReport.findFirst({
+      where: and(
+        eq(bugReport.id, input.id),
+        eq(bugReport.organizationId, activeMember.organizationId)
+      ),
+      columns: {
+        id: true,
+        reporterId: true,
+      },
+    })
+
+    if (!existingReport) {
+      throw new ORPCError("NOT_FOUND", { message: "Bug report not found" })
+    }
+
+    if (
+      !canManageBugReport({
+        reporterId: existingReport.reporterId,
+        viewerRole: activeMember.role,
+        viewerUserId: context.session.user.id,
+      })
+    ) {
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "Only the report creator or organization admins/owners can manage this bug report.",
+      })
+    }
 
     const updated = await db
       .update(bugReport)
@@ -191,7 +288,7 @@ export const updateBugReportVisibility = protectedProcedure
       .where(
         and(
           eq(bugReport.id, input.id),
-          eq(bugReport.organizationId, activeOrgId)
+          eq(bugReport.organizationId, activeMember.organizationId)
         )
       )
       .returning({ id: bugReport.id, visibility: bugReport.visibility })

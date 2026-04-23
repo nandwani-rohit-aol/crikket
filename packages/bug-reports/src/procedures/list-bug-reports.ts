@@ -28,7 +28,7 @@ import {
   visibilityValues,
 } from "../lib/utils"
 import { protectedProcedure } from "./context"
-import { requireActiveOrgId } from "./helpers"
+import { canManageBugReport, requireActiveOrgMember } from "./helpers"
 
 const priorityValues = Object.values(PRIORITY_OPTIONS) as [
   Priority,
@@ -62,6 +62,7 @@ export interface BugReportListItem {
   priority: Priority
   tags: string[]
   url: string | undefined
+  canManage: boolean
   createdAt: string
   updatedAt: string
 }
@@ -173,6 +174,7 @@ function normalizeDuration(metadata: Record<string, unknown> | null): string {
 
 interface BugReportListRecord {
   id: string
+  reporterId: string | null
   title: string | null
   description: string | null
   metadata: unknown
@@ -195,7 +197,11 @@ interface BugReportListRecord {
 }
 
 async function mapBugReportListItem(
-  report: BugReportListRecord
+  report: BugReportListRecord,
+  viewer: {
+    role: string
+    userId: string
+  }
 ): Promise<BugReportListItem> {
   const metadata = report.metadata as Record<string, unknown> | null
   const attachmentType = isAttachmentType(report.attachmentType)
@@ -255,6 +261,11 @@ async function mapBugReportListItem(
     priority: normalizePriority(report.priority),
     tags: Array.isArray(report.tags) ? report.tags : [],
     url: report.url ?? undefined,
+    canManage: canManageBugReport({
+      reporterId: report.reporterId,
+      viewerRole: viewer.role,
+      viewerUserId: viewer.userId,
+    }),
     uploader,
     createdAt: report.createdAt.toISOString(),
     updatedAt: report.updatedAt.toISOString(),
@@ -265,10 +276,12 @@ export const listBugReports = protectedProcedure
   .input(listBugReportsInputSchema)
   .handler(
     async ({ context, input }): Promise<PaginatedResult<BugReportListItem>> => {
-      const activeOrgId = requireActiveOrgId(context.session)
+      const activeMember = await requireActiveOrgMember(context.session)
       const { page, perPage, offset, limit } = normalizePagination(input)
 
-      const filters = [eq(bugReport.organizationId, activeOrgId)]
+      const filters = [
+        eq(bugReport.organizationId, activeMember.organizationId),
+      ]
 
       if (input?.search) {
         const searchValue = `%${input.search}%`
@@ -323,7 +336,10 @@ export const listBugReports = protectedProcedure
 
       const items = await Promise.all(
         bugReports.map((report) =>
-          mapBugReportListItem(report as BugReportListRecord)
+          mapBugReportListItem(report as BugReportListRecord, {
+            role: activeMember.role,
+            userId: context.session.user.id,
+          })
         )
       )
 
@@ -336,7 +352,7 @@ export const listBugReports = protectedProcedure
 
 export const getBugReportDashboardStats = protectedProcedure.handler(
   async ({ context }): Promise<BugReportDashboardStats> => {
-    const activeOrgId = requireActiveOrgId(context.session)
+    const activeMember = await requireActiveOrgMember(context.session)
 
     const [result] = await db
       .select({
@@ -351,7 +367,7 @@ export const getBugReportDashboardStats = protectedProcedure.handler(
         publicCount: sql<number>`SUM(CASE WHEN ${bugReport.visibility} = 'public' THEN 1 ELSE 0 END)`,
       })
       .from(bugReport)
-      .where(eq(bugReport.organizationId, activeOrgId))
+      .where(eq(bugReport.organizationId, activeMember.organizationId))
 
     return {
       total: normalizeInt(result?.total),

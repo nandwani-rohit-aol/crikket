@@ -12,6 +12,7 @@ import { useMutation } from "@tanstack/react-query"
 import { useRouter } from "nextjs-toploader/app"
 import { toast } from "sonner"
 
+import { client } from "@/utils/orpc"
 import { InviteMemberForm } from "./invite-member-form"
 import { MembersTable } from "./members-table"
 import { PendingInvitations } from "./pending-invitations"
@@ -77,6 +78,26 @@ export function OrganizationMembersSection({
     },
     onError: (error) => {
       toast.error(getErrorMessage(error, "Failed to invite member"))
+    },
+  })
+
+  const addMemberDirectMutation = useMutation({
+    mutationFn: async (input: { email: string; role: "admin" | "member" }) =>
+      client.auth.addOrganizationMemberDirect({
+        email: input.email,
+        organizationId,
+        role: input.role,
+      }),
+    onSuccess: (result) => {
+      router.refresh()
+      toast.success(
+        result.canceledInvitationCount > 0
+          ? "Member added directly and pending invitation canceled"
+          : "Member added directly"
+      )
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Failed to add member directly"))
     },
   })
 
@@ -147,26 +168,31 @@ export function OrganizationMembersSection({
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Invite Members</CardTitle>
+          <CardTitle className="text-lg">Add Members</CardTitle>
           <CardDescription>
-            Invite teammates and assign them the right organization role.
+            Add existing teammates directly or send an invite when they have not
+            signed up yet.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <InviteMemberForm
             canInviteMembers={canInviteMembers}
+            isAddingDirectly={addMemberDirectMutation.isPending}
             isInviting={inviteMemberMutation.isPending}
+            onAddMemberDirectly={async (input) => {
+              await addMemberDirectMutation.mutateAsync(input)
+            }}
             onInviteMember={(input) => inviteMemberMutation.mutateAsync(input)}
           />
           {canManage ? null : (
             <p className="text-muted-foreground text-sm">
-              Only admins can invite new members.
+              Only organization admins and owners can manage members.
             </p>
           )}
           {hasReachedMemberCap ? (
             <p className="text-muted-foreground text-sm">
               {currentPlan === "pro"
-                ? "Pro plan member limit reached. Upgrade to Studio to invite more teammates."
+                ? "Pro plan member limit reached. Upgrade to Studio to add more teammates."
                 : "Member limit reached for this organization plan."}
             </p>
           ) : null}

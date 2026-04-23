@@ -11,13 +11,19 @@ import {
   SelectValue,
 } from "@crikket/ui/components/ui/select"
 import { useForm } from "@tanstack/react-form"
+import { useRef } from "react"
 
 import { inviteMemberFormSchema } from "@/lib/schema/settings"
 import { formatRoleLabel } from "./role-labels"
 
 interface InviteMemberFormProps {
   canInviteMembers: boolean
+  isAddingDirectly: boolean
   isInviting: boolean
+  onAddMemberDirectly: (input: {
+    email: string
+    role: "admin" | "member"
+  }) => Promise<void>
   onInviteMember: (input: {
     email: string
     role: "admin" | "member"
@@ -26,9 +32,12 @@ interface InviteMemberFormProps {
 
 export function InviteMemberForm({
   canInviteMembers,
+  isAddingDirectly,
   isInviting,
+  onAddMemberDirectly,
   onInviteMember,
 }: InviteMemberFormProps) {
+  const submitActionRef = useRef<"direct" | "invite">("direct")
   const form = useForm({
     defaultValues: {
       email: "",
@@ -38,13 +47,27 @@ export function InviteMemberForm({
       onChange: inviteMemberFormSchema,
     },
     onSubmit: async ({ value }) => {
-      await onInviteMember({
-        email: value.email,
-        role: value.role,
-      })
+      if (submitActionRef.current === "direct") {
+        await onAddMemberDirectly({
+          email: value.email,
+          role: value.role,
+        })
+      } else {
+        await onInviteMember({
+          email: value.email,
+          role: value.role,
+        })
+      }
+
       form.reset()
     },
   })
+  const isSubmitting = form.state.isSubmitting || isInviting || isAddingDirectly
+
+  const submitWithAction = async (action: "direct" | "invite") => {
+    submitActionRef.current = action
+    await form.handleSubmit()
+  }
 
   return (
     <form
@@ -67,7 +90,7 @@ export function InviteMemberForm({
                 <Input
                   aria-invalid={isInvalid}
                   autoComplete="email"
-                  disabled={!canInviteMembers || isInviting}
+                  disabled={!canInviteMembers || isSubmitting}
                   id={field.name}
                   name={field.name}
                   onBlur={field.handleBlur}
@@ -88,7 +111,7 @@ export function InviteMemberForm({
             <Field className="space-y-1">
               <FieldLabel htmlFor={field.name}>Role</FieldLabel>
               <Select
-                disabled={!canInviteMembers || isInviting}
+                disabled={!canInviteMembers || isSubmitting}
                 onValueChange={(value) =>
                   field.handleChange(value as "admin" | "member")
                 }
@@ -109,13 +132,38 @@ export function InviteMemberForm({
         </form.Field>
       </div>
 
-      <Button
-        className="w-fit"
-        disabled={!canInviteMembers || isInviting || form.state.isSubmitting}
-        type="submit"
-      >
-        {isInviting || form.state.isSubmitting ? "Inviting..." : "Send invite"}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          className="w-fit"
+          disabled={!canInviteMembers || isSubmitting}
+          onClick={() => {
+            submitWithAction("direct").catch(() => undefined)
+          }}
+          type="button"
+        >
+          {isAddingDirectly && submitActionRef.current === "direct"
+            ? "Adding..."
+            : "Add directly"}
+        </Button>
+        <Button
+          className="w-fit"
+          disabled={!canInviteMembers || isSubmitting}
+          onClick={() => {
+            submitWithAction("invite").catch(() => undefined)
+          }}
+          type="button"
+          variant="outline"
+        >
+          {isInviting && submitActionRef.current === "invite"
+            ? "Inviting..."
+            : "Send invite"}
+        </Button>
+      </div>
+
+      <p className="text-muted-foreground text-sm">
+        Add directly for teammates who already have a Crikket account. Use an
+        invite if they have not signed up yet.
+      </p>
     </form>
   )
 }

@@ -23,6 +23,7 @@ import {
 const MINUTE = 60
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
+const DEFAULT_ORG_INVITATION_TTL = 30 * DAY
 
 const allowedSignupDomains = env.ALLOWED_SIGNUP_DOMAINS
 
@@ -210,6 +211,7 @@ export const auth = betterAuth({
   plugins: [
     admin(),
     organization({
+      invitationExpiresIn: DEFAULT_ORG_INVITATION_TTL,
       sendInvitationEmail: async (data) => {
         await sendOrganizationInvitationEmail({
           email: data.email,

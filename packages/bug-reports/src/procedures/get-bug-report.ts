@@ -1,11 +1,12 @@
 import { db } from "@crikket/db"
+import { member } from "@crikket/db/schema/auth"
 import { bugReport } from "@crikket/db/schema/bug-report"
 import {
   PRIORITY_OPTIONS,
   type Priority,
 } from "@crikket/shared/constants/priorities"
 import { ORPCError } from "@orpc/server"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { resolveCaptureUrl } from "../lib/storage"
 import {
   assertBugReportAccessById,
@@ -15,6 +16,7 @@ import {
   statusValues,
 } from "../lib/utils"
 import { o } from "./context"
+import { canManageBugReport } from "./helpers"
 
 const priorityValues = Object.values(PRIORITY_OPTIONS) as [
   Priority,
@@ -47,10 +49,27 @@ export const getBugReportById = o
       visibility: report.visibility,
     })
     const activeOrgId = context.session?.session.activeOrganizationId
-    const canEdit =
-      Boolean(context.session?.user) &&
-      Boolean(activeOrgId) &&
-      activeOrgId === report.organizationId
+    let canEdit = false
+
+    if (context.session?.user && activeOrgId === report.organizationId) {
+      const activeMember = await db.query.member.findFirst({
+        where: and(
+          eq(member.organizationId, activeOrgId),
+          eq(member.userId, context.session.user.id)
+        ),
+        columns: {
+          role: true,
+        },
+      })
+
+      if (activeMember) {
+        canEdit = canManageBugReport({
+          reporterId: report.reporterId,
+          viewerRole: activeMember.role,
+          viewerUserId: context.session.user.id,
+        })
+      }
+    }
 
     const status = isStatus(report.status) ? report.status : statusValues[0]
     const priority = priorityValues.includes(report.priority as Priority)

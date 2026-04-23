@@ -109,17 +109,21 @@ export function BugReportCard({
       />
       <CardContent className="p-0">
         <div className="relative aspect-video overflow-hidden bg-muted">
-          <div className="absolute top-2 left-2 z-20">
-            <Checkbox
-              aria-label={`Select ${report.title}`}
-              checked={isChecked}
-              onCheckedChange={(checked) => onToggleSelection(checked === true)}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-              }}
-            />
-          </div>
+          {report.canManage ? (
+            <div className="absolute top-2 left-2 z-20">
+              <Checkbox
+                aria-label={`Select ${report.title}`}
+                checked={isChecked}
+                onCheckedChange={(checked) =>
+                  onToggleSelection(checked === true)
+                }
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+              />
+            </div>
+          ) : null}
 
           <div className="absolute top-2 right-2 z-20">
             <DropdownMenu>
@@ -154,48 +158,52 @@ export function BugReportCard({
                   <ExternalLink className="size-4" />
                   Open in new tab
                 </DropdownMenuItem>
-                {isRetryable ? (
+                {report.canManage && isRetryable ? (
                   <DropdownMenuItem onClick={onRetryDebuggerIngestion}>
                     <RotateCcw className="size-4" />
                     Retry debugger ingest
                   </DropdownMenuItem>
                 ) : null}
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Privacy</DropdownMenuLabel>
-                  <DropdownMenuRadioGroup
-                    onValueChange={(value) => {
-                      if (value !== report.visibility) {
-                        onUpdateReport({
-                          visibility: value as BugReportVisibility,
-                        })
-                      }
-                    }}
-                    value={report.visibility}
-                  >
-                    {VISIBILITY_OPTIONS.map((visibilityOption) => (
-                      <DropdownMenuRadioItem
-                        key={visibilityOption.value}
-                        value={visibilityOption.value}
+                {report.canManage ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Privacy</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup
+                        onValueChange={(value) => {
+                          if (value !== report.visibility) {
+                            onUpdateReport({
+                              visibility: value as BugReportVisibility,
+                            })
+                          }
+                        }}
+                        value={report.visibility}
                       >
-                        {visibilityOption.label}
-                      </DropdownMenuRadioItem>
-                    ))}
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setIsEditSheetOpen(true)}>
-                  <Edit3 className="size-4" />
-                  Edit report
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={onRequestDelete}
-                  variant="destructive"
-                >
-                  <Trash2 className="size-4" />
-                  Delete
-                </DropdownMenuItem>
+                        {VISIBILITY_OPTIONS.map((visibilityOption) => (
+                          <DropdownMenuRadioItem
+                            key={visibilityOption.value}
+                            value={visibilityOption.value}
+                          >
+                            {visibilityOption.label}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setIsEditSheetOpen(true)}>
+                      <Edit3 className="size-4" />
+                      Edit report
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={onRequestDelete}
+                      variant="destructive"
+                    >
+                      <Trash2 className="size-4" />
+                      Delete
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -268,19 +276,21 @@ export function BugReportCard({
           ) : null}
         </div>
       </CardContent>
-      <EditBugReportSheet
-        onOpenChange={setIsEditSheetOpen}
-        onUpdated={onReportUpdated}
-        open={isEditSheetOpen}
-        report={{
-          id: report.id,
-          title: report.title,
-          tags: report.tags,
-          status: report.status,
-          priority: report.priority,
-          visibility: report.visibility,
-        }}
-      />
+      {report.canManage ? (
+        <EditBugReportSheet
+          onOpenChange={setIsEditSheetOpen}
+          onUpdated={onReportUpdated}
+          open={isEditSheetOpen}
+          report={{
+            id: report.id,
+            title: report.title,
+            tags: report.tags,
+            status: report.status,
+            priority: report.priority,
+            visibility: report.visibility,
+          }}
+        />
+      ) : null}
     </Card>
   )
 }

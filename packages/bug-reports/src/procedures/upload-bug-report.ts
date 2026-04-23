@@ -11,7 +11,12 @@ import {
   finalizeBugReportUploadInputSchema,
 } from "../lib/upload-session"
 import { protectedProcedure } from "./context"
-import { normalizeTags, requireActiveOrgId } from "./helpers"
+import {
+  canManageBugReport,
+  normalizeTags,
+  requireActiveOrgId,
+  requireActiveOrgMember,
+} from "./helpers"
 
 export const createBugReportUpload = protectedProcedure
   .input(createBugReportUploadSessionInputSchema)
@@ -44,16 +49,45 @@ export const retryBugReportDebuggerIngestionProcedure = protectedProcedure
     })
   )
   .handler(async ({ context, input }) => {
-    const activeOrgId = requireActiveOrgId(context.session)
-    const result = await retryBugReportDebuggerIngestion({
-      bugReportId: input.id,
-      organizationId: activeOrgId,
-    })
+    const activeMember = await requireActiveOrgMember(context.session)
 
     const report = await db.query.bugReport.findFirst({
       where: and(
         eq(bugReport.id, input.id),
-        eq(bugReport.organizationId, activeOrgId)
+        eq(bugReport.organizationId, activeMember.organizationId)
+      ),
+      columns: {
+        id: true,
+        reporterId: true,
+      },
+    })
+
+    if (!report) {
+      throw new ORPCError("NOT_FOUND", { message: "Bug report not found" })
+    }
+
+    if (
+      !canManageBugReport({
+        reporterId: report.reporterId,
+        viewerRole: activeMember.role,
+        viewerUserId: context.session.user.id,
+      })
+    ) {
+      throw new ORPCError("FORBIDDEN", {
+        message:
+          "Only the report creator or organization admins/owners can manage this bug report.",
+      })
+    }
+
+    const result = await retryBugReportDebuggerIngestion({
+      bugReportId: input.id,
+      organizationId: activeMember.organizationId,
+    })
+
+    const updatedReport = await db.query.bugReport.findFirst({
+      where: and(
+        eq(bugReport.id, input.id),
+        eq(bugReport.organizationId, activeMember.organizationId)
       ),
       columns: {
         debuggerIngestionError: true,
@@ -63,15 +97,15 @@ export const retryBugReportDebuggerIngestionProcedure = protectedProcedure
       },
     })
 
-    if (!report) {
+    if (!updatedReport) {
       throw new ORPCError("NOT_FOUND", { message: "Bug report not found" })
     }
 
     return {
       debugger: result.debugger,
-      debuggerIngestionError: report.debuggerIngestionError,
-      debuggerIngestionStatus: report.debuggerIngestionStatus,
-      id: report.id,
-      submissionStatus: report.submissionStatus,
+      debuggerIngestionError: updatedReport.debuggerIngestionError,
+      debuggerIngestionStatus: updatedReport.debuggerIngestionStatus,
+      id: updatedReport.id,
+      submissionStatus: updatedReport.submissionStatus,
     }
   })
