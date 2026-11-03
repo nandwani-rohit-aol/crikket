@@ -1,4 +1,8 @@
-import { DEBUGGER_SESSIONS_STORAGE_KEY } from "@crikket/capture-core/debugger/constants"
+import {
+  DEBUGGER_SESSIONS_STORAGE_KEY,
+  MAX_STORED_SESSION_COUNT,
+  STORED_SESSION_MAX_AGE_MS,
+} from "@crikket/capture-core/debugger/constants"
 import {
   appendActionEventWithDedup,
   appendEventWithRetentionPolicy,
@@ -83,12 +87,67 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
     }, 250)
   }
 
-  const persistState = async () => {
-    const sessionsSnapshot = Array.from(sessionsById.values())
+  // Oldest-first list of session ids that are candidates for eviction when
+  // storage is full or too many sessions have piled up.
+  const sessionIdsOldestFirst = () =>
+    Array.from(sessionsById.values())
+      .sort((a, b) => a.startedAt - b.startedAt)
+      .map((session) => session.sessionId)
 
-    await chrome.storage.local.set({
-      [DEBUGGER_SESSIONS_STORAGE_KEY]: sessionsSnapshot,
-    })
+  // Drops sessions that were never submitted/discarded. Without this they
+  // accumulate in chrome.storage.local until it hits the 10 MB quota
+  // ("Resource::kQuotaBytes quota exceeded") and every new capture fails.
+  const pruneStaleSessions = (): boolean => {
+    const now = Date.now()
+    let changed = false
+
+    for (const session of Array.from(sessionsById.values())) {
+      if (now - session.startedAt > STORED_SESSION_MAX_AGE_MS) {
+        removeSession(session.sessionId)
+        changed = true
+      }
+    }
+
+    const ids = sessionIdsOldestFirst()
+    for (const sessionId of ids.slice(
+      0,
+      Math.max(0, ids.length - MAX_STORED_SESSION_COUNT)
+    )) {
+      removeSession(sessionId)
+      changed = true
+    }
+
+    return changed
+  }
+
+  const persistState = async () => {
+    pruneStaleSessions()
+
+    // On a quota error evict the oldest session and retry, so a full
+    // storage never breaks capturing. In-memory state stays authoritative;
+    // storage only matters if the service worker restarts mid-capture.
+    while (true) {
+      try {
+        await chrome.storage.local.set({
+          [DEBUGGER_SESSIONS_STORAGE_KEY]: Array.from(sessionsById.values()),
+        })
+        return
+      } catch (error) {
+        const oldestSessionId = sessionIdsOldestFirst()[0]
+        if (!oldestSessionId || sessionsById.size <= 1) {
+          reportNonFatalError(
+            "Debugger state does not fit in extension storage; skipping persist",
+            error
+          )
+          await chrome.storage.local
+            .remove([DEBUGGER_SESSIONS_STORAGE_KEY])
+            .catch(() => undefined)
+          return
+        }
+
+        removeSession(oldestSessionId)
+      }
+    }
   }
 
   const registerSessionAssociations = (session: StoredDebuggerSession) => {
@@ -124,6 +183,10 @@ export function createDebuggerSessionStore(): DebuggerSessionStore {
 
       sessionsById.set(session.sessionId, session)
       registerSessionAssociations(session)
+    }
+
+    if (pruneStaleSessions()) {
+      schedulePersist()
     }
   }
 

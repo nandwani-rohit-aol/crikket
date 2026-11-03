@@ -33,7 +33,14 @@ export default defineConfig({
         },
       },
     },
-    permissions: ["activeTab", "scripting", "storage", "tabCapture", "tabs"],
+    permissions: [
+      "activeTab",
+      "scripting",
+      "storage",
+      "tabCapture",
+      "tabs",
+      "unlimitedStorage",
+    ],
     host_permissions: ["<all_urls>"],
   },
 })

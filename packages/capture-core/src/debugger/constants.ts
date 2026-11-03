@@ -3,6 +3,12 @@ export const MAX_TEXT_LENGTH = 2000
 export const MAX_URL_LENGTH = 4096
 export const MAX_NETWORK_BODY_LENGTH = 4000
 
+// Persisted debugger sessions live in chrome.storage.local (10 MB cap without
+// the unlimitedStorage permission). Sessions that were never submitted or
+// discarded (crash, closed recorder tab) are dropped after this age / count.
+export const STORED_SESSION_MAX_AGE_MS = 6 * 60 * 60 * 1000
+export const MAX_STORED_SESSION_COUNT = 5
+
 export const PAGE_BRIDGE_SOURCE = "CRIKKET_DEBUGGER_PAGE_BRIDGE"
 export const BACKGROUND_LISTENER_FLAG =
   "__crikketDebuggerBackgroundListenerRegistered"
